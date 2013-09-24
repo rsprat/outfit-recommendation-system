@@ -1,0 +1,71 @@
+package rob.crs.informationGathering.clustering;
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+
+import cern.colt.matrix.DoubleFactory2D;
+import cern.colt.matrix.DoubleMatrix2D;
+
+public class SimilarityMatrix
+{
+	private DoubleMatrix2D similarityMatrix; //N*N matrix with the similarity between the pairs of the N items
+	private HashMap<Integer,Integer> itemIDRowNumber; //Store the maping between the items id and the id they have in the similarityMatrix
+	private HashMap<Integer,Integer> rowNumberItemId; 
+	private SimilarityFunction similarityFunction;
+
+	public SimilarityMatrix(int[] itemsIds, SimilarityFunction similarityFunction)
+	{
+		this.similarityFunction = similarityFunction;
+		itemIDRowNumber = new HashMap<Integer,Integer>(itemsIds.length);
+		rowNumberItemId = new HashMap<Integer,Integer>(itemsIds.length);
+		Set<Integer> filteredItemsIds = new HashSet<Integer>();
+		for(int i=0; i<itemsIds.length; i++)
+		{
+			if(filteredItemsIds.add(itemsIds[i])) //If the id wasn't in the set
+			{
+				Integer rowNumber = new Integer(filteredItemsIds.size()-1);
+				Integer itemId = new Integer(itemsIds[i]);
+				itemIDRowNumber.put(itemId,rowNumber); //Add the maping between the index in the matrix and the item id
+				rowNumberItemId.put(rowNumber,itemId);
+			}
+		}
+		//Fill the similarity matrix with the similarity values
+		similarityMatrix = DoubleFactory2D.dense.make(filteredItemsIds.size(),filteredItemsIds.size());
+		for(int i=0;i<filteredItemsIds.size();i++)
+		{
+			for(int j=i;j<filteredItemsIds.size();j++)
+			{
+				double s = similarityFunction.getSimilarity(rowNumberItemId.get(i), rowNumberItemId.get(j));
+				similarityMatrix.set(i, j,s);
+				similarityMatrix.set(j, i,s);
+			}
+		}		
+	}
+	
+	public int getItemId(int index)
+	{
+		return rowNumberItemId.get(index);
+	}
+	
+	public int getRowNumber(int itemId)
+	{
+		return itemIDRowNumber.get(itemId);
+	}
+	
+	public DoubleMatrix2D getSimilarityMatrix()
+	{
+		return similarityMatrix.copy();
+	}
+	public SimilarityFunction getSimilarityFunction() {
+		return similarityFunction;
+	}
+
+
+	
+	
+
+}

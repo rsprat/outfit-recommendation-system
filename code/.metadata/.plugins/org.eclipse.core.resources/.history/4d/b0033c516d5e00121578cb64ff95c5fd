@@ -1,0 +1,52 @@
+package rob.crs.imgfeaturesextraction;
+
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+import rob.crs.core.config.ConfigReader;
+
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.model.impl.CompoundCategoryI;
+import rob.crs.core.polyvore.AllItemsCollector;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.imageProcessing.BackgroundExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import rob.crs.imgfeaturesextraction.imageProcessing.DirectoryReader;
+import rob.crs.imgfeaturesextraction.imageProcessing.NoiseDetection;
+import sun.applet.Main;
+
+import com.googlecode.javacpp.Loader;
+import com.googlecode.javacv.*;
+import com.googlecode.javacv.FrameGrabber.Array;
+import com.googlecode.javacv.cpp.*;
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.*;
+import static com.googlecode.javacv.cpp.opencv_calib3d.*;
+import static com.googlecode.javacv.cpp.opencv_objdetect.*;
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.*;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+
+public class FeaturesExtractor {
+	
+	private static final String IMAGES_SRC_PATH = ConfigReader.getAttribute("bigImagesFolder");
+	private static final String IMAGES_DST_PATH = ConfigReader.getAttribute("processedImagesFolder");
+	
+
+
+	
+   
+       
+}

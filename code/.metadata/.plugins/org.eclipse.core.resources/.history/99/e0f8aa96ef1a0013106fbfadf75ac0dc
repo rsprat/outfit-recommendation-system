@@ -1,0 +1,186 @@
+package rob.ors.recommender;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import org.apache.log4j.Logger;
+
+import rob.ors.core.model.api.AbstractGarment;
+import rob.ors.core.model.api.AbstractOutfit;
+import rob.ors.core.model.api.ConcreteGarment;
+import rob.ors.core.model.api.ConcreteOutfit;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.api.Garment;
+import rob.ors.core.model.api.Outfit;
+import rob.ors.core.model.api.Member;
+import rob.ors.core.model.impl.ConcreteGarmentI;
+import rob.ors.core.model.impl.ConcreteOutfitI;
+import rob.ors.garmentsclustering.clustering.Cluster;
+import rob.ors.informationGathering.getters.GarmentGetter;
+import rob.ors.informationGathering.getters.MemberGetter;
+import rob.ors.informationGathering.getters.OutfitGetter;
+
+
+public class Recommender {
+	private static Logger LOGGER = Logger.getLogger(Recommender.class.getCanonicalName());
+	private static int MINIMUM_VIEWS = 10;
+	private static int USER_PUNCTUATION = 3;
+	private static Random random = new Random();
+	
+	public static Outfit makeRecommendation(Integer uid, Integer garmentId)
+	{
+		DBConnection.transaction();	
+		Member member = MemberGetter.getMember(uid, true, 1); //Get the member info, updating it if necessari and with 1 deepness level (his outfits and the outfits of his friends)
+		if(member == null) throw new IllegalArgumentException("Member not found");
+		ConcreteGarment garment = GarmentGetter.getGarment(garmentId, true,1); // Get the garment, update it and get the outfits where it appears
+		if(garment == null) throw new IllegalArgumentException("garment not found");
+		Cluster.clusterNewData(); //Cluster the new gathered data
+		
+		/*Member member = (Member) DBConnection.session().get(Member.class, uid);
+		ConcreteGarmentI garment = (ConcreteGarmentI) DBConnection.session().get(ConcreteGarmentI.class,garmentId);*/
+		
+		//AbstractGarment garmentAbstraction = garment.getAbstractGarment() != null ? garment.getAbstractGarment() : getAbstractGarment(garment);
+		//Get the ids of the abstract outfits that have the garment abstraction as a component	
+		List<Integer> abstractOutfitsIds = DBConnection.session().createSQLQuery("select distinct(abstract_outfit_id) from abstract_outfits_components comp, garments g where g.id = "+garment.getId()+" AND g.abstract_garment_id = comp.abstract_garment_id").list();
+
+		Map<AbstractOutfit,Float> outfitsScores = new HashMap<AbstractOutfit,Float>(abstractOutfitsIds.size());
+		for(Integer setId : abstractOutfitsIds)
+		{
+			AbstractOutfit outfit = (AbstractOutfit) DBConnection.session().createQuery("from AbstractOutfitI where id="+setId).list().get(0);
+			outfitsScores.put(outfit, score(outfit, member));
+		}
+		
+		for(Outfit s:outfitsScores.keySet()) LOGGER.info(s.getId()+" : "+outfitsScores.get(s));
+		AbstractOutfit selectedAbstractOutfit = rouletteChooseOutfit(outfitsScores); //Roultte select abstract outfit
+		
+		//Random select concrete outfit
+		Object[] concreteOutfitsList = selectedAbstractOutfit.getOutfits().toArray();
+		ConcreteOutfitI selectedConcreteOutfit = (ConcreteOutfitI) concreteOutfitsList[random.nextInt(concreteOutfitsList.length)];
+		
+		//Replace concrete garment with the same category of the query garment for the query garment.		
+		return addQuryGarmentToConcreteOutfit(selectedConcreteOutfit,garment);
+		
+	}
+	public static ConcreteOutfit addQuryGarmentToConcreteOutfit(ConcreteOutfit outfit,ConcreteGarment queryGarment)
+	{
+		ConcreteOutfit returnOutfit = new ConcreteOutfitI(-1, null);
+		boolean garmentReplace = false;//Controls if a garment from the outfit has been replaced for the qury garment
+		for(ConcreteGarment g: outfit.getGarments())
+		{
+			if(!garmentReplace && g.getCategory().getId() == queryGarment.getCategory().getId())
+			{
+				returnOutfit.addGarment(queryGarment);
+				garmentReplace = true;
+			}else
+			{
+				returnOutfit.addGarment(g);
+			}
+			
+		}
+		
+		return returnOutfit;
+	}
+	
+	public static AbstractOutfit rouletteChooseOutfit(Map<AbstractOutfit, Float> outfits)
+	{
+		float total = 0;
+		for(Float f: outfits.values())total+=f;
+		
+		float randVal = random.nextFloat();
+		float lowerLevel = 0;
+		for(AbstractOutfit outfit:outfits.keySet())
+		{
+			if(randVal/total>=lowerLevel && randVal<lowerLevel+outfits.get(outfit)/total) return outfit;
+			lowerLevel+=outfits.get(outfit)/total;
+		}
+		throw new IllegalMonitorStateException("Shouldn't reach here");
+	}
+	
+	public static java.util.Set<ConcreteOutfit> getConcreteOutfitsWithGarments(java.util.Set<Garment> garments)
+	{
+		if(garments.size()==0) throw new IllegalArgumentException("garments list is empty");
+		Garment[] aux = (Garment[]) garments.toArray();
+		String garmentsList = ""+aux[0].getId();
+		for(int i = 0; i<garments.size(); i++)
+		{
+			garmentsList+=","+aux[i].getId();
+		}
+		
+		DBConnection.transaction();
+		String query = "SELECT set_id FROM outfits_components WHERE garment_id IN ("+garmentsList+") GROUP BY set_id HAVING COUNT(*)="+garments.size();
+		List<Integer> setIds = DBConnection.session().createSQLQuery(query).list();
+			
+		java.util.Set<ConcreteOutfit> outfits = new HashSet<ConcreteOutfit>();
+		for(Integer setId:setIds) outfits.add(OutfitGetter.getOutfit(setId, false,1));
+		return outfits;		
+	}
+	
+	public static java.util.Set<AbstractOutfit> getAbstractOutfitsWithGarments(java.util.Set<Garment> garments)
+	{
+		if(garments.size()==0) throw new IllegalArgumentException("garments list is empty");
+		Garment[] aux = (Garment[]) garments.toArray();
+		String garmentsList = ""+aux[0].getId();
+		for(int i = 0; i<garments.size(); i++)
+		{
+			garmentsList+=","+aux[i].getId();
+		}
+		
+		DBConnection.transaction();
+		String query = "SELECT set_id FROM abstract_outfits_components WHERE garment_id IN ("+garmentsList+") GROUP BY set_id HAVING COUNT(*)="+garments.size();
+		List<Integer> setIds = DBConnection.session().createSQLQuery(query).list();
+			
+		java.util.Set<AbstractOutfit> outfits = new HashSet<AbstractOutfit>();
+		for(Integer setId:setIds) outfits.add((AbstractOutfit) DBConnection.session().createQuery("from AbstractOutfit where id="+setId));
+		return outfits;		
+	}
+	
+	/**
+	 * Get the score of the given concrete outfit for the given member
+	 * @param outfit
+	 * @param member
+	 * @return the score of the outfit
+	 */
+	public static float score(ConcreteOutfit outfit, Member member)
+	{
+		boolean memberLikedOutfit = member.getLikedOutfits().contains(outfit) || member.getMemberOutfits().contains(outfit); //Check if the member liked the sed or created it
+		
+		float likesOverViews = ((float)outfit.getLikes())/outfit.getViews();
+		if(outfit.getViews()==0)likesOverViews = 0;
+		LOGGER.info("liked over views "+likesOverViews);
+		float lOVFactor = Math.min(1, ((float)outfit.getViews())/MINIMUM_VIEWS);
+		LOGGER.info("LOVFACT"+lOVFactor);
+		int followingLikedOutfitCount = 0;
+		DBConnection.transaction();
+		for(Member following: member.getFollowing())
+		{
+			if(following.getLikedOutfits().contains(outfit) || following.getMemberOutfits().contains(outfit))
+			{
+				followingLikedOutfitCount+=1;
+			}
+		}
+		LOGGER.info("Following likes "+followingLikedOutfitCount);
+		float followingLikedOverAll = ((float)followingLikedOutfitCount)/member.getFollowing().size();
+		if(member.getFollowing().size()==0)followingLikedOverAll=0;
+		LOGGER.info("Following likes over all "+followingLikedOverAll);
+		int memberPunctuation =0;
+		if(memberLikedOutfit) memberPunctuation =USER_PUNCTUATION;
+		
+		return likesOverViews*lOVFactor + followingLikedOverAll + memberPunctuation;
+	}
+	
+	/**
+	 * Get the score of an abstract outfit for the given member
+	 * @param outfit
+	 * @param member
+	 * @return
+	 */
+	public static float score(AbstractOutfit outfit, Member member)
+	{
+		float totalScore = 0;
+		for(ConcreteOutfit s: outfit.getOutfits()) totalScore+=score(s, member);
+		return totalScore/outfit.getOutfits().size();
+	}
+
+}

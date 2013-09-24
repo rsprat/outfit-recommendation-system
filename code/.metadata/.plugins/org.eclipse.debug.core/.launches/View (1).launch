@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
+<listEntry value="/outfitRecommendationSystem/graphicalTools/rob/ors/graphicalTools/View.java"/>
+</listAttribute>
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
+<listEntry value="1"/>
+</listAttribute>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="rob.ors.graphicalTools.View"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="outfitRecommendationSystem"/>
+<stringAttribute key="org.eclipse.jdt.launching.VM_ARGUMENTS" value="-Djava.library.path=&quot;C:/Program Files/javacv/javacv-src/src/main/java/com/googlecode/javacv/cpp&quot;&#13;&#10;-Dlog4j.configuration=file:/${workspace_loc:outfitRecommendationSystem}/logconfig.lcf&#13;&#10;-Xmx1000m"/>
+</launchConfiguration>

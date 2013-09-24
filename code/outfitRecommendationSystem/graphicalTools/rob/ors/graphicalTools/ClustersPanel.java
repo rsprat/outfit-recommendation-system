@@ -1,0 +1,570 @@
+package rob.ors.graphicalTools;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.text.DecimalFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import org.apache.log4j.Logger;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.AbstractGarment;
+import rob.ors.core.model.api.Category;
+import rob.ors.core.model.api.ConcreteGarment;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.impl.AbstractGarmentI;
+import rob.ors.core.model.impl.CategoryI;
+import rob.ors.core.model.impl.ConcreteGarmentI;
+import rob.ors.core.polyvore.PolyvoreCategoryTree;
+import rob.ors.core.utils.DirectoryReader;
+import rob.ors.core.utils.GarmentRemover;
+import rob.ors.garmentsclustering.clustering.Cluster;
+import rob.ors.garmentsclustering.clustering.MySpectralClusterer;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.ors.garmentssimilarity.textProcessing.AttributesDictionary;
+import rob.ors.garmentssimilarity.textProcessing.DescriptionProcessor;
+
+
+
+public class ClustersPanel extends JPanel implements ComponentListener, ChangeListener,ActionListener{
+	
+	private static final String IMAGES_SRC_PATH = Paths.BIG_IMAGES_FOLDER;
+	private static final DecimalFormat df = new DecimalFormat("#.##");
+	private int referenceGarmentId = 0;
+	private LinkedList<Integer>toRemoveGarments;
+	private JComboBox categoryComboBox;
+	private MySpectralClusterer clusterer;
+
+	Map<String,Integer> categoryMap;
+	protected int[] garments;
+	private static final Logger LOGGER = Logger.getLogger(ClustersPanel.class.getCanonicalName());
+	
+	int categoryId=3;
+	JButton go;
+	private int numGarments = 20;
+	JTextField numGarmentsField;
+	
+	private float alpha = 0.99999f;
+	JTextField alphaField;
+	
+
+	private boolean readSimilarityFile;
+	JTextField similarityFunctionWeightsField;
+	
+	
+	
+	protected CompoundSimilarityMatrix simMatrix;
+	protected JScrollPane scroller;
+	protected static Image blackImage;
+
+	private CompoundSimilarityFunctionBuilder similarityFunctionBuilder;
+	static{
+		try {
+			blackImage =  ImageIO.read(new File(IMAGES_SRC_PATH+"/black.jpg"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+
+
+	private void initializeCategoryComboBox(){
+		DBConnection.transaction();
+	
+		categoryMap = new HashMap<String,Integer>();
+		for(Category cat : PolyvoreCategoryTree.getSubtreeAsSet(0))
+		{
+			String catName = "";
+			Category aux = cat;
+			while(aux!=PolyvoreCategoryTree.getCategoryTreeRoot())
+			{
+				catName = aux.getName()+">"+catName;
+				aux=aux.getParentCategory();
+			}
+			catName+="("+cat.getId()+")";
+			categoryMap.put(catName, cat.getId());
+		}
+
+		LinkedList cats = new LinkedList<String>(categoryMap.keySet());
+		Collections.sort(cats,new Comparator<String>() {
+
+			@Override
+			public int compare(String o1, String o2) {
+				return o1.compareTo(o2);
+
+			}
+		});
+		categoryComboBox = new JComboBox(cats.toArray());
+	}
+	
+	public ClustersPanel(CompoundSimilarityFunctionBuilder similarityFunctionBuilder)
+	{	
+		this(similarityFunctionBuilder,false);
+		categoryChanged();
+	}
+	
+	private String similarityFunctionWeightsToString(double[] weights)
+	{
+		String s ="";
+		 DecimalFormat df = new DecimalFormat("#.##");
+		for(int i=0;i<weights.length;i++)s+=df.format(weights[i])+";";
+		return s.substring(0, s.length()-1);
+	}
+	
+	private double[] similarityFunctionWeightsFromString(String weights, int length)
+	{
+		double[] v= new double[length];
+		String[] s = weights.split(";");
+		for(int i =0;i<s.length;i++)v[i] = Double.parseDouble(s[i].replace(",", "."));
+		return v;
+	}
+	
+	
+	private ClustersPanel(CompoundSimilarityFunctionBuilder similarityFunctionBuilder,boolean readSimilarityFile)
+	{
+		this.readSimilarityFile = readSimilarityFile;
+		this.similarityFunctionBuilder = similarityFunctionBuilder;
+		toRemoveGarments = new LinkedList<Integer>();
+		add(new JLabel("Num garments"));
+		numGarmentsField = new JTextField(new Integer(numGarments).toString());
+		add(numGarmentsField);
+		
+		add(new JLabel("Alpha"));
+		alphaField = new JTextField(new Float(alpha).toString());
+		add(alphaField);		
+		
+		add(new JLabel("similarityFunctionWeights"));
+		similarityFunctionWeightsField = new JTextField(similarityFunctionWeightsToString(similarityFunctionBuilder.getSimilarityFunctionWeights()));
+		add(similarityFunctionWeightsField);		
+		
+		go = new JButton("Go");
+		add(go);
+		go.addActionListener(this);		
+		
+		
+		JButton store = new JButton("Store clusters");
+		add(store);
+		store.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent arg0)
+			{
+			
+				LOGGER.info("Store clusters");
+				Cluster.saveClusters(clusterer,garments,categoryId);
+				
+			}
+		});
+		initializeCategoryComboBox();
+		add(categoryComboBox);
+		categoryComboBox.setMaximumSize(new Dimension(500,30));
+		categoryComboBox.addActionListener(this);
+	}
+	private void GetGarmentsFromSimilarityMatrix(CompoundSimilarityMatrix simMatrix)
+	{
+		this.simMatrix=simMatrix;
+		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+		garments = new int[simMatrix.getGarmentsIds().length];
+		numGarments = garments.length;		
+		numGarmentsField.setText(""+numGarments);
+		LOGGER.info("NUM garmentS:"+garments.length);
+		for(int i=0;i<garments.length;i++) garments[i]=simMatrix.getGarmentsIds()[i];
+	}
+	
+	public ClustersPanel(CompoundSimilarityFunctionBuilder similarityFunctionBuilder, CompoundSimilarityMatrix simMatrx,int catId)
+	{	
+		this(similarityFunctionBuilder,true);
+		this.similarityFunctionBuilder = similarityFunctionBuilder;
+		GetGarmentsFromSimilarityMatrix(simMatrx);
+		categoryId = catId;
+		fillClusterGarmentsPanels();
+	}
+	
+	private int[] concatenate (int[] a, int[] b)
+	{
+		int[] c = new int[a.length+b.length];
+
+		for(int i=0; i<a.length;i++)
+		{
+			c[i]=a[i];
+		}
+		for(int i=0;i<b.length;i++)
+		{
+			c[i+a.length]=b[i];
+		}
+		return c;
+	}
+	
+
+	public void removeGarment(int i)
+	{		
+		GarmentRemover.removeGarment(garments[i]);
+		LOGGER.info("remove garment "+garments[i]);	
+	}
+
+	
+	private void fillClusterGarmentsPanels()
+	{
+		clusterer = new MySpectralClusterer();
+		try {
+			clusterer.setAlphaStar(alpha);
+		} catch (Exception e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		try
+		{		
+			//Logger.log("Start computing sim matrix at "+new Date().toString()+" with "+garments.length+" garments",Logger.NORMAL);
+			Date start = new Date();
+			if(simMatrix==null){
+					simMatrix = new CompoundSimilarityMatrix(garments,similarityFunctionBuilder);
+			}
+			if(simMatrix.getGarmentsIds().length==0)return;
+		    //Logger.log("End computation of sim amtrix, took "+((new Date().getTime()-start.getTime())/1000)+" for "+garments.length+" garments",Logger.NORMAL);
+
+			clusterer.buildClusterer(garments, simMatrix);
+		} catch (Exception e1){ e1.printStackTrace();}
+		
+		
+		int n = 0;
+		try 
+		{
+			n = clusterer.numberOfClusters();
+		} catch (Exception e1) {e1.printStackTrace();}
+		
+		JPanel clustersPanel;
+		clustersPanel = new JPanel();
+		clustersPanel.setLayout(new GridLayout(1,n));
+		
+	
+		//Initialize the panels
+		List<JPanel> clusterGarmentsPanel = new LinkedList<JPanel>();
+		for(int i=0;i<n;i++)
+		{
+			JPanel panel = new JPanel();
+			panel.setLayout(new GridLayout(garments.length,1));			
+			clusterGarmentsPanel.add(panel);	
+			clustersPanel.add(panel);
+		}
+		final AttributesDictionary d = DescriptionProcessor.buildDictionary();
+		for( int i = 0; i<garments.length;i++)
+		{
+			final int aux = i;
+			int c = 0;
+			try {
+				c = clusterer.getTrainingInstanceCluster(garments[i]);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			JPanel comp = new JPanel();			
+			comp.setBorder(BorderFactory.createTitledBorder("garment: "+garments[i]));		
+			
+			comp.addMouseListener(new MouseListener() {
+				
+				@Override
+				public void mouseReleased(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mousePressed(MouseEvent arg0) {
+					/*referenceGarmentId = garments[aux];	
+					DBConnection.transaction();
+					ConcreteGarment garment = (ConcreteGarmentI)DBConnection.session().createQuery("from ConcreteGarmentI  where id="+referenceGarmentId).list().get(0);
+					DescriptionProcessor.getAttributesFromDescription(garment);
+					DescriptionProcessor.print(garment,d);*/
+					//fillClusterGarmentsPanels();					
+				}
+				
+				@Override
+				public void mouseExited(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mouseEntered(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mouseClicked(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+			});
+			
+			JButton b = new JButton();
+			b.setSize(5, 5);
+			b.setBackground(Color.red);
+			b.addActionListener(new ActionListener() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					removeGarment(aux);
+					//fillClusterGarmentsPanels();
+					
+				}
+			});
+			comp.add(b);
+			String label = "";	
+			
+			if(referenceGarmentId!=0)
+			{
+				label = ""+df.format(simMatrix.getSimilarity(referenceGarmentId,garments[i]))+"\n";
+				double[] sim = simMatrix.getSimilarityComponents(referenceGarmentId,garments[i]);
+				for(int k=0;k<sim.length;k++)
+				{
+					double portion = simMatrix.getSimilarityFunctionBuilder().getSimilarityFunctionWeights()[k]*sim[k];
+					label+=k+": "+ df.format(portion)+" ("+df.format(sim[k])+")\n";
+				}
+			}
+			BufferedImage garmentImage = loadImage(garments[i]);
+			ImageIcon icon = new ImageIcon( garmentImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+			JLabel imageLabel = new JLabel(convertToMultiline(label),icon,SwingConstants.CENTER);
+			imageLabel.setFont(new Font("default", Font.PLAIN, 8));
+			comp.add(imageLabel);
+		
+			clusterGarmentsPanel.get(c).add(comp);	
+			//clustersPanel.add(comp);	
+		}
+		
+		int oldHVal = 0;
+		int oldVVal = 0;
+		if(scroller!=null)
+		{
+			oldHVal = scroller.getHorizontalScrollBar().getValue();
+			oldVVal = scroller.getVerticalScrollBar().getValue();
+			remove(scroller);
+		}
+		scroller = new JScrollPane(clustersPanel); 
+		scroller.getHorizontalScrollBar().setUnitIncrement(20);
+		scroller.getVerticalScrollBar().setUnitIncrement(20);
+		scroller.getHorizontalScrollBar().setValue(oldHVal);
+	
+		
+		final int x = oldHVal;
+		final int y = oldVVal;
+		SwingUtilities.invokeLater(new Runnable() {
+		      public void run() {
+		    	  scroller.getViewport().setViewPosition(new java.awt.Point(x, y));
+		      }
+		});
+		
+		scroller.getVerticalScrollBar().setValue(oldVVal);
+		
+		add(scroller);
+		addComponentListener(this);
+		
+		componentResized(null);
+		revalidate();
+		repaint();		
+	}
+
+	
+	public static String convertToMultiline(String orig)
+	{
+	    return "<html>" + orig.replaceAll("\n", "<br>");
+	}
+		
+	
+//	private BufferedImage loadImage(int garmentId)
+//	{
+//		BufferedImage myPicture = (BufferedImage) blackImage;
+//		IplImage garmentAux = cvLoadImage(IMAGES_SRC_PATH+garmentId+".jpg");
+//		CvMat garmentImage = CvMatUtils.getCvMatFromIplImage(garmentAux);			
+//		CvMat garmentMask = BackgroundExtractor.colorMask(garmentImage,CV_RGB(255,255,255),10);	
+//		BufferedImage img = new BufferedImage(garmentMask.rows(),garmentMask.cols(),BufferedImage.TYPE_INT_BGR);		
+//		for(int i=0;i<garmentMask.rows();i++)
+//		{
+//			for(int j=0;j<garmentMask.cols();j++)
+//			{
+//				img.setRGB(j, i,  (int) garmentMask.get(i,j));
+//			}
+//		}
+//		cvReleaseImage(garmentAux);
+//		garmentMask.deallocate();
+//		return img;
+//
+//	}
+	
+	protected BufferedImage loadImage(int garmentId)
+	{
+		BufferedImage myPicture = (BufferedImage) blackImage;
+    	try
+		{
+    	
+	    	myPicture = ImageIO.read(new File(Paths.BIG_IMAGES_FOLDER+garmentId+".jpg"));
+			
+		} catch (IOException e)
+		{
+		}
+    	
+    	return myPicture;
+	}
+
+	@Override
+	public void componentHidden(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void componentMoved(ComponentEvent e) {
+		// TODO Auto-generated method stubA
+		
+	}
+
+	@Override
+	public void componentResized(ComponentEvent e)
+	{
+		scroller.setPreferredSize(new Dimension(getSize().width,getSize().height-100));
+	    revalidate();
+	    repaint();
+	}
+
+	@Override
+	public void componentShown(ComponentEvent e) {
+		scroller.setPreferredSize(new Dimension(getSize().width,getSize().height-100));
+	    revalidate();
+	    repaint();		
+	}
+		
+	@Override
+	public void stateChanged(ChangeEvent arg0)
+	{
+	}
+	
+	
+	@Override
+	public void actionPerformed(ActionEvent e)
+	{
+	
+		if(e.getSource().equals(categoryComboBox))
+		{
+			JComboBox cb = (JComboBox)e.getSource();	
+			categoryId = categoryMap.get(cb.getSelectedItem());
+			categoryChanged();		
+		}
+		if(e.getSource().equals(go))
+		{
+
+			alpha = Float.parseFloat(alphaField.getText());	
+			int newNumGarments = Integer.parseInt(numGarmentsField.getText());
+			
+			double[] newSims = similarityFunctionWeightsFromString(similarityFunctionWeightsField.getText(), simMatrix.getSimilarityFunctionBuilder().getSimilarityFunctionWeights().length);	
+			
+			if(newSims!=simMatrix.getSimilarityFunctionBuilder().getSimilarityFunctionWeights())
+			{	
+				simMatrix.getSimilarityFunctionBuilder().setSimilarityFunctionWeight(newSims);				
+			}
+			
+			if(newNumGarments!=numGarments)
+			{
+				referenceGarmentId = 0;
+				numGarments = newNumGarments != -1 ? newNumGarments :((BigInteger) DBConnection.session().createSQLQuery("SELECT COUNT(*) FROM garments WHERE category_id = "+categoryId).list().get(0)).intValue();
+				simMatrix = null;
+				garments=Arrays.copyOf(selectGarments(categoryId),numGarments);	
+			}
+			fillClusterGarmentsPanels();			
+		    revalidate();
+		    repaint();	
+			
+		}
+		
+		
+	}
+	
+	private static int[] selectGarments(int catId)
+	{
+		List<String> images = DirectoryReader.getFileNames(Paths.BIG_IMAGES_FOLDER, "jpg");		
+		List<Integer> garmentsWithImage = new LinkedList<Integer>();
+
+		for(String id: images)
+		{
+			id = id.replace(".jpg", "");
+			id = id.replace(".jpeg", "");
+			if(!id.equals("black"))garmentsWithImage.add(new Integer(id));
+		
+		}				
+		DBConnection.transaction();
+		
+		List<ConcreteGarment> allGarments = (List<ConcreteGarment>) DBConnection.session().createQuery("from ConcreteGarmentI where category_id = "+catId).list();
+		List<Integer> selectedGarments = new LinkedList<Integer>();
+		Collections.shuffle(allGarments);
+		for(ConcreteGarment garment:allGarments)
+		{
+			if(garment.getDescription()!=null && !garment.getDescription().equals("None") && garment.getDescription().length()>20 &&  garmentsWithImage.contains(garment.getId())) selectedGarments.add(garment.getId());
+		}
+		
+		int []slected = new int[selectedGarments.size()];
+		for(int i = 0; i<selectedGarments.size(); i++) slected[i] = selectedGarments.get(i);
+		return slected;
+	}
+	
+	private void categoryChanged()
+	{
+		referenceGarmentId = 0;
+		if(!readSimilarityFile)
+		{
+			int[] aux = selectGarments(categoryId);
+			if(aux.length>numGarments)aux=Arrays.copyOf(aux,numGarments);
+			garments = aux;
+			simMatrix = null;
+		}
+		else
+		{
+			try {
+				simMatrix.readFile(Paths.OUTPUT_FOLDER+"\\sim_"+categoryId+".txt");
+			} catch (IOException e1) {
+				e1.printStackTrace();
+			}
+			GetGarmentsFromSimilarityMatrix(simMatrix);
+		}
+		
+		fillClusterGarmentsPanels();
+	    revalidate();
+	    repaint();		
+	}
+
+
+	//Save the created clusters
+	
+}
+

@@ -1,0 +1,239 @@
+package descProcess;
+
+
+import java.awt.Point;
+import java.io.File;
+import java.util.*;
+
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
+
+import org.hibernate.metamodel.relational.Tuple;
+import org.junit.experimental.max.MaxCore;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.informationGathering.CSVReader.CSVReader;
+import rob.crs.informationGathering.CSVReader.ItemsCSVReader;
+
+public class DescriptionProcessor {
+	
+	public void processDescriptions(LinkedList<Item> items)
+	{
+		
+	}
+	public static Map<String,Integer> merge(List<Map<String,Integer>> maps)
+	{
+		Map<String,Integer> expressions = new HashMap<String,Integer>();
+		for(Map<String,Integer> itemExpressions:maps)
+		{			
+			for(String expression:itemExpressions.keySet())
+			{
+				
+				if(expressions.containsKey(expression))
+					expressions.put(expression,expressions.get(expression)+itemExpressions.get(expression));
+				else
+					expressions.put(expression,itemExpressions.get(expression));
+			}
+		}
+		return expressions;
+	}
+	
+	public static Map<String,Integer> countExpressions(List<Item> items, int expressionLen)
+	{
+
+		LinkedList<Map<String,Integer>> expressions = new LinkedList<Map<String,Integer>> ();		
+		for(Item item:items)		
+			expressions.push(countExpressions(item,expressionLen));		
+		return merge(expressions);
+	}
+	
+	private static String concatenate(String[] in)
+	{
+		String out ="";
+		for(int i=0;i<in.length-1;i++)out+=in[i]+" ";
+		out+=in[in.length-1];
+		return out;		
+	}
+	
+	public static Map<String,Integer> countExpressions(Item item,int expressionLen)
+	{
+		Map<String,Integer> expressions = new HashMap<String,Integer>();
+		//System.out.println(item.getDescription());
+		String[] desc = item.getDescription().split(" ");
+		
+		for(int i=0;i<desc.length;i++)
+		{
+			String expr = concatenate(Arrays.copyOfRange(desc, i, Math.min(i+expressionLen, desc.length)));
+			if(expressions.containsKey(expr))			
+				expressions.put(expr, expressions.get(expr)+1);
+			else
+				expressions.put(expr, 1);			
+		}		
+		//printExpressions(expressions,1);
+		return expressions;
+	}
+	
+	public static Map<String,Integer> filter(Map<String,Integer> originalMap, int minItems)
+	{
+		Map<String,Integer> resultMap = new HashMap<String,Integer>();
+		for(String expression: originalMap.keySet())
+			if(originalMap.get(expression)>=minItems)
+				resultMap.put(expression, originalMap.get(expression));
+		return resultMap;
+	}
+	
+	public static void printExpressions(Map<String,Integer> expressions,int numItems)
+	{
+		LinkedList<Object[]> list = new LinkedList<Object[]>();
+		for(String expression:expressions.keySet()) list.add(new Object[]{expression,expressions.get(expression)});
+		
+		Collections.sort(list, new Comparator() {
+			@Override
+			public int compare(Object o1, Object o2) {				
+				return ((Integer)((Object[])o1)[1])-((Integer)((Object[])o2)[1]);
+			}
+		});
+		float factor = 100.0f/numItems;
+		
+		for(Object[] obj:list)
+		{
+			System.out.println(obj[0]);
+			//System.out.println(obj[0]+"=>"+obj[1]+"=>"+(((Integer)obj[1]).floatValue()*factor));
+		}
+	}
+	
+	public static void findWords(String wordsFileName, final Map<String,Integer> terms)
+	{
+		//final Set<String> terms = new HashSet<String>();
+		CSVReader reader = new CSVReader() {
+			
+			@Override
+			protected void process(String[] line) {
+				for(String term:line)
+					if(terms.containsKey(term))
+						System.out.println(term+"=>"+terms.get(term));
+			}
+		};
+	}
+	
+	public static List<String> createSynonyms(String base, NodeList autoSynonyms)
+	{
+		LinkedList<String> vals = new LinkedList<String>();
+		vals.push(base);
+		for(int i=0;i<autoSynonyms.getLength();i++)
+		{
+			Node autoSynonym = autoSynonyms.item(i);
+			switch(autoSynonym.getNodeName())
+			{
+				case "append":
+					String toAppend = autoSynonym.getNodeValue();
+					vals.push(base+toAppend);
+					break;
+			}
+			
+		}
+		return vals;
+	}
+
+	private static boolean match(String haystack, Collection<String> needels)
+	{
+		for(String needel:needels)
+			if(haystack.contains(needel)) return true;
+		return false;
+				
+	}
+	private static boolean hasValue(Item item, Node value, NodeList autoSynonyms)
+	{
+		String desc = item.getDescription();
+		List<String> synonyms = createSynonyms((((Element)value).getAttribute("name") ), autoSynonyms);
+		for(int i=0;i<value.getChildNodes().getLength();i++)
+		{
+			String val = ((Element)value.getChildNodes().item(i)).getAttribute("name");
+			synonyms.addAll(createSynonyms(val, autoSynonyms));
+		}	
+		return match(desc,synonyms);
+	}
+	
+	public static void getAttributesFromDescription(Item item)
+	{
+		
+		File stocks = new File("E://MyDocuments//get-dressed//code//informationGathering//src//descProcess//attributes.xml");
+		DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+		try
+		{	
+			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			dbFactory.setIgnoringElementContentWhitespace(true);
+			dbFactory.setNamespaceAware(true);
+			final SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+
+			dbFactory.setValidating(true);  
+			final Schema schema = sf.newSchema(new File("E://MyDocuments//get-dressed//code//informationGathering//src//descProcess//attributesSchema.xsd"));
+			dbFactory.setSchema(schema);
+
+			
+			Document doc = dBuilder.parse(stocks);
+
+			doc.getDocumentElement().normalize();
+			
+	
+				NodeList attributes = doc.getElementsByTagName("attribute");
+				for(int i=0;i<attributes.getLength();i++)
+				{
+					Element attribute = (Element)attributes.item(i);
+					NodeList autoSynonym =  attribute.getElementsByTagName("automatic-synonyms").item(0).getChildNodes();
+					NodeList values = attribute.getElementsByTagName("values").item(0).getChildNodes();
+					for(int j=0;j<values.getLength();j++)
+					{
+						if(hasValue(item,values.item(j),autoSynonym))
+						{	System.out.println(((Element)values.item(j)).getAttribute("name"));	
+							item.getAttributes().put(i, j);
+						}
+					}	
+				}
+			}catch(Exception e){e.printStackTrace();}
+			
+	}
+	
+	
+	
+	public static void main(String[] args)
+	{
+		ItemsCSVReader reader = new ItemsCSVReader();
+		
+		List<Item> items =new LinkedList<Item>(reader.parseFile("E://MyDocuments//get-dressed//code//dataRetrival//captured//clean//items.txt"));
+		for(Item item: items)
+		{
+			getAttributesFromDescription(item);
+			//PolyvoreCategoryTree.getCategoryById(item.getId()).getItems().add((ConcreteItem)item);
+		}
+		
+		
+		/*LinkedList<	Map<String,Integer>> expressions = new LinkedList<	Map<String,Integer>>();
+		LinkedList<Item> evalItems = new LinkedList<Item>(PolyvoreCategoryTree.getSubtreeItems(3));
+		for(int i=1;i<=4;i++)
+			expressions.push(countExpressions(evalItems,i));
+		
+		
+		Map<String,Integer> expr = merge(expressions);
+		expressions.clear();
+
+		printExpressions(filter(expr,3),evalItems.size());	
+		System.out.println("--------->"+evalItems.size());
+		//PolyvoreCategoryTree.displayItemsPerCategory();
+		 * 
+		 */
+	}
+	
+
+}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="ASCII"?>
+<launch:LaunchConfiguration xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:launch="http://www.eclipse.org/MoDisco/Discovery/0.1.incubation/discovery/launch" source="org.eclipse.core.resources.IResource:/outfitRecommendationSystem/My.facetSet" openModelAfterDiscovery="true">
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#SERIALIZE_TARGET"/>
+  </parameterValues>
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#IGNORE_WHITESPACE"/>
+  </parameterValues>
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#TARGET_MODEL"/>
+  </parameterValues>
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#LIGHTWEIGHT"/>
+  </parameterValues>
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#REFRESH_SOURCE_BEFORE"/>
+  </parameterValues>
+  <parameterValues>
+    <parameter href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#TARGET_URI"/>
+  </parameterValues>
+  <discoverer href="platform:/meta/org.eclipse.modisco.infra.discovery.core/discoverersCatalog.xmi#org.eclipse.modisco.xml.discoverer"/>
+</launch:LaunchConfiguration>

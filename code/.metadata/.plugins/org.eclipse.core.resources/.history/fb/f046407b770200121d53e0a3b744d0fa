@@ -1,0 +1,174 @@
+package rob.crs.informationGathering.getters.impl;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+import org.python.core.PyObject;
+import org.python.util.PythonInterpreter;
+
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.User;
+import rob.crs.core.model.impl.ConcreteSetI;
+import rob.crs.core.model.impl.UserI;
+import rob.crs.informationGathering.getters.api.SetGetter;
+import rob.crs.informationGathering.getters.api.UserGetter;
+
+public class UserGetterI extends Getter implements UserGetter{
+	
+	public SetGetter setGetter = new SetGetterI();
+	//public UserGetter userGetter = new UserGetterI();
+	
+	/* (non-Javadoc)
+	 * @see rob.crs.informationGathering.getters.impl.UserGetter#queryWebForUser(java.lang.Integer)
+	 */
+	@Override
+	public String[] queryWebForUser(Integer uid)
+	{
+		System.out.println("Quering web for user ");
+		
+
+		File f = new File("..");
+		String pathToPythonFiles = "../dataRetrival";
+		
+		try 
+		{ 
+
+			Process p=Runtime.getRuntime().exec("python  "+pathToPythonFiles+"/getUser.py "+uid); 
+			
+			BufferedReader reader=new BufferedReader(new InputStreamReader(p.getInputStream()));
+			p.waitFor(); 
+			String[] userData = {null,null}; 
+			String newLine="";
+		
+			while((newLine=reader.readLine())!=null) 
+			{				
+				System.out.println(newLine);
+				if(newLine.startsWith("USERDATA:"))userData[0] = newLine.substring("USERDATA:".length());
+				if(newLine.startsWith("SUMMARY:"))userData[1] = newLine.substring("SUMMARY:".length());
+			} 
+			reader.close();
+			return userData;
+		} 
+		catch(IOException e1) {e1.printStackTrace();} 
+		catch(InterruptedException e2) {e2.printStackTrace();} 
+		return null;
+	}
+	
+	/* (non-Javadoc)
+	 * @see rob.crs.informationGathering.getters.impl.UserGetter#getUser(java.lang.Integer, boolean, int)
+	 */	
+	@Override
+	public User getUser(Integer uid,boolean update, int recursion)
+	{	
+		
+		System.out.println("Getting user "+uid);
+		
+		User user = null;		
+		DBConnection.transaction();
+		List<User> users =  DBConnection.session().createQuery("from UserI WHERE id="+uid).list();
+	
+		if(users.size()!=0)user = users.get(0);
+
+		/*The user is not in the DB or its older than the maximum*/
+		if(user == null || (user.isOlder(MAX_AGE) && update))
+		{
+			String data[] = queryWebForUser(uid);
+			if(data[0] == null || data[1] == null) return null;
+			user = readUserCSV(data[0].split(";"),update,recursion,user);
+			if(user!=null)user.setDate(new Date()); //Set the date to be the current
+		}
+		
+		return user;
+	}
+	
+	/* (non-Javadoc)
+	 * @see rob.crs.informationGathering.getters.impl.UserGetter#readUserCSV(java.lang.String[], boolean, int, rob.crs.core.model.api.User)
+	 */
+	@Override
+	public User readUserCSV(String[] allData,boolean update, int recursion, User user)
+	{
+		
+		String[] userData = allData[0].split(";");
+		String[] summary = allData[1].split(";");
+		System.out.println("Reading csv");
+	
+		Integer uid = integer(userData[0]);			
+		/*If user is null create it if not update the name*/
+		if(user!=null)
+		{
+			user = new UserI(uid, userData[1]);
+			System.out.println("Creating user"); 
+			//DBConnection.get().session().save(user);
+		}else{user.setName(userData[1]);}
+		System.out.println("User name: "+user.getName());
+		 
+		fillUserData(userData,user,update,recursion);
+		fillUserSummary(summary,user);
+	
+		
+		DBConnection.session().saveOrUpdate(user);
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		 
+		return user;
+		
+	}
+	
+	private void fillUserData(String[] data, User user,boolean update, int recursion)
+	{
+		
+		/*User sets*/
+		System.out.println("User sets");
+		for(String sid : data[2].split(","))
+		{			
+			ConcreteSet set = setGetter.getSet(integer(sid),update,recursion);
+			if(set!=null)set.setUser(user);
+		}
+		System.out.println("User likes");
+		/*User liked sets*/
+		for(String sid : data[3].split(","))
+		{
+			ConcreteSet s = setGetter.getSet(integer(sid),update,recursion);
+			if(s != null)user.addLikedSet(s);
+		}
+		if(recursion>0)
+		{
+			/*User following*/
+			for(String userData: data[4].split(","))
+			{	
+				User u = this.getUser(integer(userData.split(":")[1]),update,recursion-1);
+				if(u!=null)
+				{
+					user.getFollowing().add(u);
+					if(recursion!=0)DBConnection.session().saveOrUpdate(user); //To avoid long time without update when recursion is activated
+				}
+			}
+			
+			for(String userData: data[5].split(","))
+			{
+				//User u = UserGetter.getUser(integer(userData.split(":")[1]),update,recursion--);
+				//if(u!=null)user.getFollowers().add(u);
+			}
+		}	
+			
+	}
+	
+	private void fillUserSummary(String[] summary, User user)
+	{
+		
+	}
+	
+
+
+}

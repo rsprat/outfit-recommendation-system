@@ -1,0 +1,131 @@
+package rob.crs.informationGathering.clustering;
+
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.impl.*;
+import rob.crs.core.model.api.Item;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import weka.core.Attribute;
+import weka.core.FastVector;
+import weka.core.Instance;
+
+/**
+ * Utility methods to convert a model object (i.e item or set) to and from a suitable instance 
+ * for applying clustering techniques.
+ * @author robert
+ *
+ */
+public class ModelInstanceConverter {
+	
+	/*
+	 * Sttic map that holds the relation between a model attribute and a instance attribute
+	 * */
+	public static Map<Integer,Attribute> ATTRIBUTES = new HashMap<Integer,Attribute>();
+	static
+	{
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.FIRST_COLOR_PREDOMINANCY.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.FIRST_COLOR_PREDOMINANCY.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.SECOND_COLOR_RGB.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.SECOND_COLOR_RGB.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.SECOND_COLOR_PREDOMINANCY.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.SECOND_COLOR_PREDOMINANCY.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.THIRD_COLOR_RGB.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.THIRD_COLOR_RGB.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.THIRD_COLOR_PREDOMINANCY.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.THIRD_COLOR_PREDOMINANCY.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.NOISE.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.NOISE.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.SHOULDERS_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.SHOULDERS_PROPORTION.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.CHEST_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.CHEST_PROPORTION.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.WAIST_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.WAIST_PROPORTION.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.HIPS_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.HIPS_PROPORTION.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.KNEE_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.KNEE_PROPORTION.name()));
+		  ATTRIBUTES.put(rob.crs.core.model.api.Attribute.BOTTOM_PROPORTION.getId()-1, new Attribute(rob.crs.core.model.api.Attribute.BOTTOM_PROPORTION.name()));
+	}
+	
+	public static List<Instance> toInstance(List<ConcreteItem> items)
+	{
+		
+		List<Instance> instances = new LinkedList<Instance>();
+		for(Item item: items)
+		{
+			instances.add(toInstance(item));			
+		}
+		return instances;
+	}
+	
+	/**
+	 * Create a new abstract item from its instance representation
+	 * @param instance
+	 * @return
+	 */
+	public static AbstractItem toModel(Category category, Instance instance)
+	{	
+		AbstractItem item = new AbstractItemI(category);
+		DBConnection.session().save(item);
+
+		/*Copy all the attributes from the instance to the item*/
+		Enumeration<Attribute> attributes = instance.enumerateAttributes();
+		while(attributes.hasMoreElements())
+		{
+			Attribute attr = attributes.nextElement();
+			item.getAttributes().put(new Integer(attr.index()+1),new Integer((int) instance.value(attr)));
+		}	
+
+		return item;
+	}
+	
+	
+	public static Instance toInstance(Item item)
+	{
+		/**
+		 * 
+		 * TODO: The number of attributes should be always the same for each items belonging to a category. (problems with attribute index)
+		 * Provably the assumtion we are making when seting the number of attributes to the number of attributes in the item attributes map, if 
+		 * it wasn't right (i.e. a trowsers item that laks an attribute that all the other instances of throwsers have) it would 
+		 * have some unpredictable effects on the clustering algorithm 
+		 * (Its just an intuition! Be aware)
+		 */
+		//Instance instance = new Instance(11);//This statement is a bit risky
+		Instance instance = new Instance(rob.crs.core.model.api.Attribute.values().length);//This statement is a bit risky
+		for(int i = 0; i<rob.crs.core.model.api.Attribute.values().length; i++)
+		{
+			instance.setValue(i, 0);
+		}
+		
+		
+		/**
+		 * For each attribute in the attributes map of item, add this attribute to the instance as an integer attribute 
+		 * TODO Attributes such as color should be added as a nominal attribute 
+		 */
+		int i = 0;
+		for(Integer attributeId:item.getAttributes().keySet())
+		{
+		
+			if
+			(		attributeId==rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId() ||
+					attributeId==rob.crs.core.model.api.Attribute.SECOND_COLOR_RGB.getId() ||
+					attributeId==rob.crs.core.model.api.Attribute.THIRD_COLOR_RGB.getId() 			
+			)instance.setValue(attributeId-1, ColorComparator.toGray(CvMatUtils.intToBGR(item.getAttributes().get(attributeId))));//Set the color as grayscale
+			else instance.setValue(attributeId-1, item.getAttributes().get(attributeId));	
+			/*
+			*/
+			//else instance.setValue(ATTRIBUTES.get(attributeId), item.getAttributes().get(attributeId));	
+			//if(	attributeId==rob.crs.core.model.api.Attribute.WAIST_PROPORTION.getId())instance.setValue(0, item.getAttributes().get(attributeId));	
+			//if(	attributeId==rob.crs.core.model.api.Attribute.HIPS_PROPORTION.getId())instance.setValue(1, item.getAttributes().get(attributeId));	
+			//if(	attributeId==rob.crs.core.model.api.Attribute.BOTTOM_PROPORTION.getId())instance.setValue(0, item.getAttributes().get(attributeId));	
+			
+		}
+		
+		return instance;
+		
+	}
+
+}

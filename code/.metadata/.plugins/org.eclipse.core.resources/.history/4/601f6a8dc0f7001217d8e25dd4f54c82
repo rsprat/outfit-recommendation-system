@@ -1,0 +1,259 @@
+package rob.ors.imgfeaturesextraction;
+
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvCompareHist;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvReleaseHist;
+
+import java.util.Date;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.log4j.Logger;
+
+import javatests.AnonInner;
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.Category;
+import rob.ors.imgfeaturesextraction.imageProcessing.BackgroundExtractor;
+import rob.ors.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import rob.ors.imgfeaturesextraction.imageProcessing.HistogramExtractor;
+import rob.ors.imgfeaturesextraction.imageProcessing.NoiseDetection;
+import rob.ors.itemClustering.similarityMatrix.NoiseSimilarityFunction;
+import weka.core.Debug.Random;
+
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+import com.googlecode.javacv.cpp.opencv_imgproc.CvHistogram;
+
+/**
+ * Compar
+ * @author robert
+ *
+ */
+public class ItemsComparator {
+	private static Logger LOGGER = Logger.getLogger(ItemsComparator.class.getCanonicalName());
+	private static final String IMAGES_SRC_PATH = Paths.SMALL_IMAGES_FOLDER;
+	public static IplImage getItemImage(int iid)
+	{
+		return cvLoadImage(IMAGES_SRC_PATH+iid+".jpg");
+	}
+
+	public static double noiseSimilarity(IplImage anItemImage,CvMat anItemMask, IplImage anotherItemImage, CvMat anotherItemMask)
+	{
+		double maxDif = Math.pow(20,2);
+		double anItemNoise = NoiseDetection.noiseValue(anItemImage, anItemMask);
+		double anotherItemNoise = NoiseDetection.noiseValue(anotherItemImage,anotherItemMask);
+		double propotrionDif = Math.pow(Math.abs(anItemNoise-anotherItemNoise),2);			
+		return (1-Math.min(1, propotrionDif/maxDif))*100;
+	}
+
+	
+	private static float[] getItemWidths(CvMat itemMask,int itemTop,int itemHeight)
+	{
+		IplImage image = cvCreateImage(cvGetSize(itemMask),IPL_DEPTH_8U , 1);		
+		cvGetImage(itemMask, image);
+		float[] widths = new float[100];
+		for(int i = 0;i<100;i++)
+		{
+			widths[i] = ItemProportionsExtractor.fastWidthAtHeigth(image,i,itemTop,itemHeight,itemMask.rows(),itemMask.cols());				
+		}
+		return widths;
+	}
+	
+	
+	public static void drawLines(CvMat item1Mask)
+	{
+		IplImage itemMaskImage = new IplImage();	
+		cvGetImage(item1Mask, itemMaskImage);
+		ImagePrinter p1 = new ImagePrinter(itemMaskImage);
+		int top = ItemProportionsExtractor.getTop(item1Mask);
+		p1.drawHorzontalLine(top);
+		int bottom = ItemProportionsExtractor.getBottom(item1Mask);
+		p1.drawHorzontalLine(bottom);
+		Random r = new Random(System.currentTimeMillis());		
+		p1.print("C:\\Users\\rsprat\\Desktop\\test\\test2\\"+r.nextLong()+"_tb.jpg");		
+		System.out.println("top:"+top+" bottom:"+bottom);
+		
+	}
+	
+	public static float[] getItemProportions(CvMat itemMask)
+	{
+		int itemTop = ItemProportionsExtractor.getTop(itemMask);
+		int itemHeight = Math.abs(ItemProportionsExtractor.getBottom(itemMask)-itemTop);	
+		float[] widths =  getItemWidths(itemMask,itemTop,itemHeight);
+	}
+
+	
+	public static double widthsSimilarity(CvMat anItemMask,CvMat anotherItemMask)
+	{	
+		ItemProportionsExtractor extr = new ItemProportionsExtractor() {
+			
+			@Override
+			public void printProportions(ImagePrinter printer, CvMat mask) {
+			}
+			
+			@Override
+			public Map<Integer, Integer> getProportions(CvMat mask) {
+				return null;
+			}
+			
+			@Override
+			public Set<Category> getAplicableCategories() {
+				return null;
+			}
+		};
+		int anItemTop = extr.getTop(anItemMask);
+		int anItemHeight = Math.abs(extr.getBottom(anItemMask)-anItemTop);		
+		int anotherItemTop = extr.getTop(anotherItemMask);
+		int anotherItemHeight = Math.abs(extr.getBottom(anotherItemMask)-anotherItemTop);
+
+		
+		//drawLines(anItemMask);
+		
+		
+		float[] anItemWidths = getItemWidths(anItemMask,anItemTop,anItemHeight);
+		float[] anotherItemWidths = getItemWidths(anotherItemMask,anotherItemTop,anotherItemHeight);
+		
+		double similarity = 0;
+		float maxDif = ((float)Math.pow(15.0f,2));
+		for(int i = 0; i<100; i++)
+		{
+			float anItemProportionAtPoint = anItemWidths[i]/anItemHeight;
+			float anotherItemProportionAtPoint = anotherItemWidths[i]/anotherItemHeight;
+			/*float anItemProportionAtPoint = 0.4f;
+			float anotherItemProportionAtPoint = 0.5f;*/
+			double propotrionDif = Math.pow(Math.abs((anItemProportionAtPoint*100)-(anotherItemProportionAtPoint*100)),2);			
+			similarity+= 1-Math.min(1, propotrionDif/maxDif);
+			//float propotrionDif = Math.abs(anItemWidthAtPoint-anotherItemWidthAtPoint);
+			//similarity+= Math.exp(-Math.pow(propotrionDif*10,2)/2*Math.pow(1.8f,2));
+		}
+		//LOGGER.info(similarity);
+		return similarity;
+		//return Math.min(Math.max(0, similarity/100),1);
+	}
+	
+	
+	public static double widthsSimilarity(float[] anItemProportions,float[] anotherItemProportions)
+	{	
+
+		
+		double similarity = 0;
+		float maxDif = ((float)Math.pow(15.0f,2));
+		for(int i = 0; i<100; i++)
+		{
+			double propotrionDif = Math.pow(Math.abs(( anItemProportions[i]*100)-( anotherItemProportions[i]*100)),2);			
+			similarity+= 1-Math.min(1, propotrionDif/maxDif);
+			//float propotrionDif = Math.abs(anItemWidthAtPoint-anotherItemWidthAtPoint);
+			//similarity+= Math.exp(-Math.pow(propotrionDif*10,2)/2*Math.pow(1.8f,2));
+		}
+		//LOGGER.info(similarity);
+		return similarity;
+		//return Math.min(Math.max(0, similarity/100),1);
+	}
+
+	/**
+	 * Overrithe of the method patchHistogramSimilarity(int anItem, int anotherItem,float patchSize) with the
+	 * items masks passed as parameters
+	 * @param anItemImage
+	 * @param anItemMask
+	 * @param anotherItemImage
+	 * @param anotherItemMask
+	 * @param patchSize
+	 * @return
+	 */
+	public static double patchHistogramSimilarity(IplImage anItemImage,CvMat anItemMask, IplImage anotherItemImage, CvMat anotherItemMask,float patchSize)
+	{
+		patchSize = Math.max(0, patchSize);
+		patchSize = Math.min(patchSize, 1);			
+		if(anItemImage == null || anotherItemImage == null)return 0;		
+		
+		CvHistogram [][] firstItemHistMatrix = HistogramExtractor.getHSPatchHistogram(anItemImage,anItemMask,patchSize);
+    	CvHistogram [][] secondItemHistMatrix = HistogramExtractor.getHSPatchHistogram(anotherItemImage,anotherItemMask,patchSize);
+    	
+    	double accumulated = 0;
+    	for(int i = 0; i<firstItemHistMatrix.length; i++)
+    	{
+    		for(int j=0;j<firstItemHistMatrix[i].length;j++)
+    		{
+    			double val = cvCompareHist(firstItemHistMatrix[i][j], secondItemHistMatrix[i][j], 2);
+    			accumulated+=Math.abs(val);
+    		}
+    	}	
+    	
+    	double mean = accumulated/(firstItemHistMatrix.length*firstItemHistMatrix[0].length);
+    	
+    	for(int i = 0; i<firstItemHistMatrix.length; i++)
+    	{
+    		for(int j=0;j<firstItemHistMatrix[i].length;j++)
+    		{
+    	        cvReleaseHist(firstItemHistMatrix[i][j]); 
+    	        cvReleaseHist(secondItemHistMatrix[i][j]); 
+    		}
+    	}	
+    	return mean*100;
+	}
+	
+	
+	public static void main(String[] args)
+	{
+
+		//String item1Name = "6295";
+		String item1Name = "garment_test_hist_simil_11";
+		IplImage item1Image = cvLoadImage("C:\\Users\\rsprat\\Desktop\\test\\"+item1Name+".jpg");	
+		
+		CvMat item1Mask  = BackgroundExtractor.colorMask(item1Image);
+		ItemProportionsExtractor extr = new ItemProportionsExtractor() {
+			
+			@Override
+			public void printProportions(ImagePrinter printer, CvMat mask) {
+				// TODO Auto-generated method stub
+				
+			}
+			
+			@Override
+			public Map<Integer, Integer> getProportions(CvMat mask) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public Set<Category> getAplicableCategories() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+		};
+		IplImage itemMaskImage = new IplImage();	
+		
+		
+		
+		
+		
+		
+		widthsSimilarity(item1Mask,item1Mask);
+		
+		
+		
+		
+		cvGetImage(item1Mask, itemMaskImage);
+		//ImagePrinter p1 = new ImagePrinter(itemMaskImage);
+		ImagePrinter p1 = new ImagePrinter(item1Image);
+		int top = extr.getTop(item1Mask);
+		p1.drawHorzontalLine(top);
+		int bottom = extr.getBottom(item1Mask);
+		p1.drawHorzontalLine(bottom);
+		float h = (float)extr.getHeight(item1Mask);
+		for(int y = top+1;y<bottom;y++)
+		{
+			//int width = extr.getWidthAtAbsolutePoint(item1Mask, y);
+			//System.out.println(width/h);
+			//System.out.println(y+": "+width);
+			//p1.drawWidth(new int[]{y,0,width});
+		}
+		
+		p1.print("C:\\Users\\rsprat\\Desktop\\test\\"+item1Name+"_tb.jpg");		
+		System.out.println("top:"+top+" bottom:"+bottom);
+	}
+	
+	
+	
+}

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename local variable &apos;iid&apos; in &apos;rob.ors.core.utils.ItemRemover.addItemToNoItemsFile(...)&apos; to &apos;itemId&apos;&#x0D;&#x0A;- Original project: &apos;outfitRecommendationSystem&apos;&#x0D;&#x0A;- Original element: &apos;rob.ors.core.utils.ItemRemover.addItemToNoItemsFile(int).iid&apos;&#x0D;&#x0A;- Renamed element: &apos;iid&apos;&#x0D;&#x0A;- Update references to refactored element" description="Rename local variable &apos;iid&apos;" id="org.eclipse.jdt.ui.rename.local.variable" input="/core&lt;rob.ors.core.utils{ItemRemover.java[ItemRemover~addItemToNoItemsFile~I@iid!2474!2480!2478!2480!I!0!true" name="itemId" references="true" stamp="1375373082690" version="1.0"/>
+</session>

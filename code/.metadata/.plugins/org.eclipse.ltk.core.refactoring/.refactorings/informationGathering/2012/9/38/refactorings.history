@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Copy element &apos;Cluster.java&apos; to &apos;rob.crs.informationGathering.clustering.Cluster.java&apos;&#x0A;- Original project: &apos;informationGathering&apos;&#x0A;- Destination element: &apos;rob.crs.informationGathering.clustering.Cluster.java&apos;&#x0A;- Original element: &apos;rob.crs.informationGathering.clustering.Cluster.java&apos;" description="Copy compilation unit" destination="/src&lt;rob.crs.informationGathering.clustering{Cluster.java" element1="/src&lt;rob.crs.informationGathering.clustering{Cluster.java" files="0" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1348034967276" units="1" version="1.0"/>
+</session>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename local variable &apos;bins&apos; in &apos;rob.crs.imgfeaturesextraction.imageProcessing.HistogramExtractor.drawHistogram(...)&apos; to &apos;numBins&apos;&#x0A;- Original project: &apos;imageFeaturesExtraction&apos;&#x0A;- Original element: &apos;rob.crs.imgfeaturesextraction.imageProcessing.HistogramExtractor.drawHistogram(int, int, int, CvHistogram).bins&apos;&#x0A;- Renamed element: &apos;bins&apos;&#x0A;- Update references to refactored element" description="Rename local variable &apos;bins&apos;" id="org.eclipse.jdt.ui.rename.local.variable" input="/src&lt;rob.crs.imgfeaturesextraction.imageProcessing{HistogramExtractor.java[HistogramExtractor~drawHistogram~I~I~I~QCvHistogram;@bins!2264!2277!2268!2271!I!0!false" name="numBins" references="true" stamp="1354290407952" version="1.0"/>
+</session>

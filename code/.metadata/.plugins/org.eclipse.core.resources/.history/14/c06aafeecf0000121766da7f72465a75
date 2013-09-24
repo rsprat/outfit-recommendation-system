@@ -1,0 +1,136 @@
+package rob.crs.informationGathering.filler;
+
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+
+import rob.crs.core.model.api.Award;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.model.api.User;
+import rob.crs.core.model.impl.ConcreteItemI;
+import rob.crs.core.model.impl.ConcreteSetI;
+import rob.crs.core.model.impl.UserI;
+import rob.crs.informationGathering.CSVReader.CSVReader;
+import rob.crs.informationGathering.CSVReader.ItemsCSVReader;
+
+public class FillSetsFromFile
+{
+	private int noItems = 0;
+	public Set<org.hibernate.mapping.Set> sets = new HashSet<org.hibernate.mapping.Set> ();
+	
+	public FillSetsFromFile()
+	{
+		SetCSVReader reader = new SetCSVReader();
+		reader.readFile("../dataRetrival/captured/sets.txt");
+		reader.session.getTransaction().commit();
+		
+		System.out.println(noItems+" sets without items");
+	}
+	
+	
+	class SetCSVReader extends CSVReader
+	{
+		public Session session;
+		Set<Integer> noItemsReferences;
+		public SetCSVReader()
+		{
+			
+			System.out.println("Connecting to DB");
+			SessionFactory sessionFactory = new Configuration().configure().buildSessionFactory();
+			session = sessionFactory.openSession();
+			
+			class SimpleReader extends CSVReader
+			{
+				private Set<Integer> references = new HashSet<Integer>(0);
+
+				public  Set<Integer> parseFile(String file)
+				{
+					readFile(file);
+					return references;
+					
+				}
+				@Override
+				protected void process(String[] line) {
+					references.add(parseInteger(line[0]));
+				}				
+			}
+			SimpleReader simpleReader = new SimpleReader();
+			noItemsReferences = simpleReader.parseFile("../dataRetrival/captured/noitems.txt");
+
+			ItemsCSVReader itemReader = new ItemsCSVReader();
+			itemReader.excludeReferences(noItemsReferences);		
+			itemReader.parseFile("../dataRetrival/captured/items.txt");
+			noItemsReferences.addAll(itemReader.unCategorized);
+			session.beginTransaction();
+		}
+
+		@Override
+		protected void process(String[] line)
+		{
+			
+			Integer sid = parseInteger(line[0]);
+			System.out.println(sid);
+			ConcreteSet set = getSet(sid);
+			set.setAge(parseInteger(line[1]));
+			set.setViews( parseInteger(line[2]));
+			set.setLikes(parseInteger(line[3]));
+			try
+			{
+			for(String item:line[4].split(","))
+			{
+				Integer iid = parseInteger(item);
+				if(!noItemsReferences.contains(iid))
+				{
+				
+					int n = set.getItems().size();
+					set.addItem(getItem(iid));
+					if(set.getItems().size()==n)throw new RuntimeException("same items as before");
+	
+				}
+				else System.out.println("noitem: "+iid);
+			}
+			session.saveOrUpdate(set);
+			session.getTransaction().commit();
+			session.beginTransaction();
+			System.out.println("==============Set filled "+set.getItems().size()+" "+line[4].split(",").length);
+			if(set.getItems().size()==0)noItems+=1;
+			}catch(RuntimeException e){System.out.println("Item not found");}
+			
+			
+		}
+		
+		/*Get an instance of set either creating it or retrieving it from the DB*/
+		private ConcreteSet getSet(Integer sid)
+		{
+			List<ConcreteSetI> sets = session.createQuery("from ConcreteSetI where id="+sid).list();
+			if(sets.size()!=0)return sets.get(0);
+			ConcreteSetI s = new ConcreteSetI(sid,null);
+			//session.save(s);
+			return s;
+		}
+		
+		
+		private ConcreteItem getItem(Integer iid)
+		{
+			List<ConcreteItem> items = session.createQuery("from ConcreteItemI where id="+iid).list();
+			if(items.size()!=0)return items.get(0);
+			throw new RuntimeException("Item not found "+iid);
+			//ConcreteItem item = new ConcreteItemI(iid,null);
+			//session.save(item);
+		
+			
+		}
+		
+	}
+	
+	
+}

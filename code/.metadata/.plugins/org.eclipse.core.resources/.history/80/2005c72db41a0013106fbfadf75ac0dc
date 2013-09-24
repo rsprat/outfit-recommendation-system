@@ -1,0 +1,216 @@
+package rob.ors.informationGathering.getters;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Date;
+import java.util.List;
+import org.apache.log4j.Logger;
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.ConcreteOutfit;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.api.Member;
+
+import rob.ors.core.model.impl.MemberI;
+import rob.ors.core.utils.GarmentRemover;
+
+
+
+public class MemberGetter extends Getter {
+	private static Logger LOGGER = Logger.getLogger(GarmentRemover.class.getCanonicalName());
+	public OutfitGetter setGetter = new OutfitGetter();
+	//public MemberGetter memberGetter = new MemberGetterI();
+	
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.MemberGetter#queryWebForMember(java.lang.Integer)
+	 */
+
+	public static String[] queryWebForMember(Integer uid)
+	{
+		LOGGER.info( "Quering web for member");
+	
+		try 
+		{ 
+			
+			Process p=Runtime.getRuntime().exec("python  "+Paths.PYTHON_SCRIPTS_PATH+"getMember.py "+uid);
+			
+			class ExecReader implements Runnable
+			{
+				InputStream istream; 
+				public ExecReader(InputStream istream )
+				{
+					this.istream = istream;
+					
+				}
+				@Override
+				public void run()
+				{
+					boolean ended = false;
+					BufferedReader reader=new BufferedReader(new InputStreamReader(istream));
+					String newLine;
+									
+					try {
+						while((newLine=reader.readLine())!=null) 
+						{
+							LOGGER.info("PROC SAYS: "+newLine);
+							
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					LOGGER.info("input reader ended ");
+					
+				}
+				
+				
+			};
+
+			/*new Thread(new ExecReader(p.getInputStream())).start();
+			new Thread(new ExecReader(p.getErrorStream())).start();*/
+				
+			BufferedReader reader=new BufferedReader(new InputStreamReader(p.getInputStream()));
+			p.waitFor();
+			String[] memberData = {null,null}; 
+			String newLine="";
+		
+			while((newLine=reader.readLine())!=null) 
+			{				
+				if(newLine.startsWith("USERDATA:"))memberData[0] = newLine.substring("USERDATA:".length());
+				if(newLine.startsWith("SUMMARY:"))memberData[1] = newLine.substring("SUMMARY:".length());
+			} 
+			
+			reader.close();
+			return memberData;
+		} 
+		catch(IOException e1) {e1.printStackTrace();}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		} 
+		
+		return null;
+	}
+	
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.MemberGetter#getMember(java.lang.Integer, boolean, int)
+	 */	
+
+	public static Member getMember(Integer uid,boolean update, int deepness)
+	{	
+		LOGGER.info("Getting member "+uid);
+		
+		Member member = null;		
+		DBConnection.transaction();
+		List<Member> members =  DBConnection.session().createQuery("from MemberI WHERE id="+uid).list();
+	
+		if(members.size()!=0)member = members.get(0);
+
+		/*The member is not in the DB or its older than the maximum*/
+		if(member == null || (member.isOlder(MAX_AGE) && update))
+		{
+			String data[] = queryWebForMember(uid);			
+			if(data[0] == null || data[1] == null) return null;
+			member = readMemberCSV(data,update,deepness,member);
+			if(member!=null)member.setDate(new Date()); //Set the date to be the current
+		}
+		
+		return member;
+	}
+	
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.MemberGetter#readMemberCSV(java.lang.String[], boolean, int, rob.ors.core.model.api.Member)
+	 */
+
+	public Member readMemberCSV(String[] allData,boolean update, int deepness, Member member)
+	{
+		LOGGER.info("Reading csv");
+		LOGGER.info(allData[0]);
+		LOGGER.info(allData[1]);
+		String[] memberData = allData[0].split(";");
+		String[] summary = allData[1].split(";");
+		
+		
+		Integer uid = integer(memberData[0]);			
+		/*If member is null create it if not update the name*/
+		if(member==null)
+		{
+			member = new MemberI(uid, "");
+			LOGGER.info("Creating member");
+			//DBConnection.get().session().save(member);
+		}
+		fillMemberData(memberData,member,update,deepness);
+		fillMemberSummary(summary,member);
+	
+		
+		DBConnection.session().saveOrUpdate(member);
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		 
+		return member;
+		
+	}
+	
+	private void fillMemberData(String[] data, Member member,boolean update, int deepness)
+	{
+		
+		/*Member outfits*/
+		LOGGER.info("Member outfits");
+		if(!data[1].equals("UNKNWON"))
+		{
+			for(String sid : data[1].split(","))
+			{			
+				ConcreteOutfit outfit = setGetter.getOutfit(integer(sid),update,deepness);
+				if(outfit!=null)outfit.setMember(member);
+			}
+		}
+		LOGGER.info("Member likes");
+		if(!data[2].equals("UNKNWON"))
+		{
+			/*Member liked outfits*/
+			for(String sid : data[2].split(","))
+			{
+				ConcreteOutfit s = setGetter.getOutfit(integer(sid),update,deepness);
+				if(s != null)member.addLikedOutfit(s);
+			}
+		}
+		if(!data[3].equals("UNKNWON") && deepness>0)
+		{
+			/*Member following*/
+			for(String memberData: data[3].split(","))
+			{	
+				Member u = this.getMember(integer(memberData.split(":")[1]),update,deepness-1);
+				if(u!=null)
+				{
+					member.getFollowing().add(u);
+					if(deepness!=0)DBConnection.session().saveOrUpdate(member); //To avoid long time without update when deepness is activated
+				}
+			}
+			
+			/*for(String memberData: data[4].split(","))
+			{
+				Member u = this.getMember(integer(memberData.split(":")[1]),update,deepness-1);
+				if(u!=null)
+				{
+					member.getFollowing().add(u);
+					if(deepness!=0)DBConnection.session().saveOrUpdate(member); //To avoid long time without update when deepness is activated
+				}
+			}*/
+		}	
+			
+	}
+	
+	private void fillMemberSummary(String[] summary, Member member)
+	{
+		member.setNumOutfitViews( integer(summary[1]));
+		member.setNumOutfitLikes(integer(summary[2]));
+		member.setNumTrophies(integer(summary[3]));		
+		member.setNumFollowers(integer(summary[4]));
+	}
+	
+
+
+}
+

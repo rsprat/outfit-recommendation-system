@@ -1,0 +1,112 @@
+package rob.crs.imgfeaturesextraction;
+
+import static com.googlecode.javacv.cpp.opencv_highgui.cvLoadImage;
+import static com.googlecode.javacv.cpp.opencv_highgui.cvSaveImage;
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.*;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+
+import java.text.DecimalFormat;
+import java.util.List;
+import java.util.logging.Logger;
+
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+import com.sun.org.apache.xerces.internal.impl.dtd.models.DFAContentModel;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.imgfeaturesextraction.imageProcessing.DirectoryReader;
+
+public class ImageReduction {
+	
+	private static final String BIG_IMAGES_FOLDER = ConfigReader.getAttribute("bigImagesFolder");
+	private static final String SMALL_IMAGES_FOLDER = ConfigReader.getAttribute("smallImagesFolder");
+	private static final Logger LOGGER = Logger.getLogger(ImageReduction.class.getCanonicalName());
+	private static final int SIDE = 80;
+	
+	
+	public static void resizeImage(int id)
+	{
+		try
+		{
+			IplImage bigImage = cvLoadImage(BIG_IMAGES_FOLDER+id+".jpg");		
+			if(bigImage == null)
+			{
+				LOGGER.info("Item "+id+" image not found");
+				return;
+			}
+			
+			float proportion = bigImage.width()/bigImage.height();
+			IplImage smallImage=IplImage.create(SIDE,(int)(SIDE*proportion), bigImage.depth(), bigImage.nChannels());
+			
+			cvResize(bigImage, smallImage);
+			cvSaveImage(SMALL_IMAGES_FOLDER+id+".jpg", smallImage);		
+			
+			
+			if(bigImage!=null)cvReleaseImage(bigImage);
+			if(smallImage!=null)cvReleaseImage(smallImage);
+		}catch(Exception e){e.printStackTrace();}
+		
+	}
+
+	public static void main(String[] args)
+	{		
+		List<String> big = DirectoryReader.getFileNames(ConfigReader.getAttribute("bigImagesFolder"), "jpg");
+		List<String> small = DirectoryReader.getFileNames(ConfigReader.getAttribute("smallImagesFolder"), "jpg");
+		LOGGER.finest("big: "+big.size()+" small:"+small.size(),Logger.DEBUG);		
+		big.removeAll(small);
+		Logger.log("remaining: "+big.size(),Logger.DEBUG);		
+		
+		
+		class ResizeImageThread implements Runnable
+		{
+			List<String> fileNames;
+			private DecimalFormat df = new DecimalFormat("#.##");
+			public ResizeImageThread(List<String> fileNames)
+			{
+				this.fileNames = fileNames;
+				
+			}
+			@Override
+			public void run()
+			{
+				int i=0;
+				for(String fileName : fileNames)    	
+		    	{      	    	
+					String fileId = fileName.substring(0, fileName.length()-("jpg".length()+1));
+		    		ImageReduction.resizeImage(Integer.parseInt(fileId));	
+		    		if(++i%100==0)
+		    		{
+		    			double completion = ((float)i/fileNames.size())*100;
+		    			Logger.log("processed: "+i+"/"+fileNames.size()+"("+df.format(completion)+"%)",Logger.DEBUG);	
+		    		}
+		    	}				
+			}
+			
+		}
+		
+	
+		Thread[] threads = new Thread[3];
+		int itemsPerThread = big.size()/threads.length;
+		for(int i=0;i<threads.length;i++)
+		{
+			int startIndex = itemsPerThread*i;
+			int endIndex;
+			if(i<threads.length-1) endIndex = startIndex+itemsPerThread;
+			else endIndex = big.size()-1;
+			threads[i]= new Thread(new ResizeImageThread(big.subList(startIndex, endIndex)));
+			threads[i].start();
+		}
+		for(int i=0;i<threads.length;i++)
+		{
+			try {
+				threads[i].wait();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+
+	}
+
+}

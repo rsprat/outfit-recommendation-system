@@ -1,0 +1,212 @@
+package rob.ors.graphicalTools;
+
+import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.Random;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.ors.garmentsclustering.similarityMatrix.DescriptionSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.HistogramSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.NoiseSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.SimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.SimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.WidthSimilarityFunction;
+
+public class View {
+	private static OrderedGarmentsPanel garmentsPanel;
+	
+	    
+	private static ClustersPanel getClustersPanel(boolean readFile)
+	{
+		CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new HistogramSimilarityFunction();				
+			}
+			
+		}, 0.5f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build(){
+				return new WidthSimilarityFunction();
+				
+			}
+			
+		}, 0.3f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new NoiseSimilarityFunction();				
+			}
+			
+		}, 0.2f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build(){
+				return new DescriptionSimilarityFunction();
+				
+			}
+			
+		}, 0.0000f);
+
+		int catId = 3;
+		CompoundSimilarityMatrix mat = new CompoundSimilarityMatrix(new int[0], fb);
+		if(readFile)
+		{
+			/*try {
+			mat.readFile(Paths.OUTPUT_FOLDER+"sim_"+catId+".txt");
+			//removeGarments(mat,10);
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}*/
+		
+			return new ClustersPanel(fb,new CompoundSimilarityMatrix(new int[0], fb),catId);			
+		}
+		else
+		{
+			return new ClustersPanel(fb);			
+		}
+	
+		
+	}
+	private static void removeGarments(CompoundSimilarityMatrix mat,int maxGarments)
+	{
+		if(mat.getGarmentsIds().length<=maxGarments)return;
+		int toRemove = mat.getGarmentsIds().length-maxGarments;
+		Random r = new Random(System.currentTimeMillis());
+		for(int i =0;i<toRemove;i++)
+		{
+			mat.removeGarment(mat.getGarmentsIds()[r.nextInt(mat.getGarmentsIds().length)]);
+		}
+		
+	}
+	public static void showClustersPanel(boolean readFiles)
+	{
+		final JFrame frame = new JFrame("Abstract outfits");		
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+		frame.add(getClustersPanel(readFiles));		
+		JButton refresh = new JButton("refresh");
+		refresh.setMargin(new Insets(0,0,0,0));  
+		refresh.addActionListener(new ActionListener() {			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if(garmentsPanel!=null)panel.remove(garmentsPanel);
+				panel.revalidate();
+				panel.repaint();				
+			}
+		});
+		panel.add(refresh);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+	}
+	public static void showAbstractOutfitsPanel()
+	{
+		final JFrame frame = new JFrame("Abstract outfits");		
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+		AbstractOutfitsViewer v = new AbstractOutfitsViewer();
+		frame.addComponentListener(v);
+		frame.add(v);
+		JButton refresh = new JButton("refresh");
+		refresh.setMargin(new Insets(0,0,0,0));  
+		refresh.addActionListener(new ActionListener() {			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if(garmentsPanel!=null)panel.remove(garmentsPanel);
+				panel.revalidate();
+				panel.repaint();				
+			}
+		});
+		panel.add(refresh);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+	}
+	
+	public static void showSuspiciousGarmentsPanel()
+	{
+		final JFrame frame = new JFrame("Abstract outfits");		
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+		frame.add(new SuspiciousGarmentsPanel());		
+		JButton refresh = new JButton("refresh");
+		refresh.setMargin(new Insets(0,0,0,0));  
+		refresh.addActionListener(new ActionListener() {			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if(garmentsPanel!=null)panel.remove(garmentsPanel);
+				panel.revalidate();
+				panel.repaint();				
+			}
+		});
+		panel.add(refresh);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+		
+	}
+	public static void main(String[] args)	
+	{	
+		//showClustersPanel(true);
+		 showAbstractOutfitsPanel();
+		//showSuspiciousGarmentsPanel();
+		
+	
+	}
+	
+	/*private static List<ConcreteGarment> selectGarments(int catId, int count)
+	{
+		Random r = new Random();
+		DBConnection.transaction();
+		List<ConcreteGarment> allGarments = (List<ConcreteGarment>) DBConnection.session().createQuery("from ConcreteGarmentI where category_id = "+catId).list();
+		LOGGER.info(allGarments.size());
+		List<ConcreteGarment> selectedGarments = new LinkedList<ConcreteGarment>();
+		while(selectedGarments.size()<count)
+		{
+			ConcreteGarment itm = allGarments.get(r.nextInt(allGarments.size()));
+			
+			if(!itm.getDescription().equals("None") && itm.getDescription().length()>20 && !selectedGarments.contains(itm))	selectedGarments.add(itm);
+		}
+		//for(ConcreteGarment garment: selectedGarments)	LOGGER.info(FeaturesExtractor.getAttributes(garment.getId(), PolyvoreCategoryTree.getCategoryById(garment.getCategory().getId()), true));
+		
+		return selectedGarments;
+	}*/
+}

@@ -1,0 +1,4 @@
+Sets: sid,time_creation,views,likes,garments
+garments: sid,cat,days,views,saves,description
+User_data: uid,sets,liked,following,followers
+User_sumary: [uid,summary["best_answer"],summary["set_views"],summary["set_likes"],summary["1st"],summary["2nd"],summary["3rd"],summary["votes"],summary["followers"]]

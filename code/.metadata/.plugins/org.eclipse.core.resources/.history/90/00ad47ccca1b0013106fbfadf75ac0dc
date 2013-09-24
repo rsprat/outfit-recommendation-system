@@ -1,0 +1,320 @@
+package rob.ors.graphicalTools;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.text.DecimalFormat;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+
+import org.apache.log4j.Logger;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.AbstractGarment;
+import rob.ors.core.model.api.AbstractOutfit;
+import rob.ors.core.model.api.Category;
+import rob.ors.core.model.api.ConcreteGarment;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.api.Outfit;
+import rob.ors.core.model.impl.AbstractGarmentI;
+import rob.ors.core.model.impl.CategoryI;
+import rob.ors.core.model.impl.ConcreteGarmentI;
+import rob.ors.core.model.impl.ConcreteOutfitI;
+import rob.ors.core.polyvore.PolyvoreCategoryTree;
+import rob.ors.core.utils.DirectoryReader;
+import rob.ors.core.utils.GarmentRemover;
+import rob.ors.garmentsclustering.clustering.Cluster;
+import rob.ors.garmentsclustering.clustering.MySpectralClusterer;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.ors.garmentssimilarity.textProcessing.AttributesDictionary;
+import rob.ors.garmentssimilarity.textProcessing.DescriptionProcessor;
+import rob.ors.recommender.Recommender;
+
+
+
+public class RecommendationPanel extends JPanel implements ComponentListener, ChangeListener,ActionListener{
+	
+	private static final String IMAGES_SRC_PATH = Paths.BIG_IMAGES_FOLDER;
+	private static final DecimalFormat df = new DecimalFormat("#.##");
+	private static final Logger LOGGER = Logger.getLogger(RecommendationPanel.class.getCanonicalName());
+	
+	int categoryId=3;
+	JButton go;
+	private int memberId = 40246;
+	JTextField memberIdField;
+	private int garmentId = 1193;
+	JTextField garmentIdField;
+	
+	protected JScrollPane scroller;
+	protected static Image blackImage;
+
+
+	static{
+		try {
+			blackImage =  ImageIO.read(new File(IMAGES_SRC_PATH+"/black.jpg"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	
+	
+		
+	RecommendationPanel()
+	{
+
+		add(new JLabel("Member"));
+		memberIdField = new JTextField(new Integer(memberId).toString());
+		add(memberIdField);
+		
+		add(new JLabel("Garment"));
+		garmentIdField = new JTextField(new Integer(garmentId).toString());
+		add(garmentIdField);			
+	
+		go = new JButton("Go");
+		add(go);
+		go.addActionListener(this);	
+	}
+	
+	private int[] concatenate (int[] a, int[] b)
+	{
+		int[] c = new int[a.length+b.length];
+
+		for(int i=0; i<a.length;i++)
+		{
+			c[i]=a[i];
+		}
+		for(int i=0;i<b.length;i++)
+		{
+			c[i+a.length]=b[i];
+		}
+		return c;
+	}
+	
+
+	private Object[] getNextAbstractOutfit(Map<AbstractOutfit,Float> aOutfitsWithScore )
+	{
+		Map<AbstractOutfit,Float> newAOutfitsWithScore = new HashMap<AbstractOutfit,Float> ();
+		List<AbstractOutfit> aOutfitsList = new LinkedList<AbstractOutfit>(aOutfitsWithScore.keySet());
+		AbstractOutfit aOutfit = null;
+		Float maxScore = new Float(0);
+		for(int i = 0;i<aOutfitsList.size();i++)
+		{
+			if(aOutfitsWithScore.get(aOutfitsList.get(i))>maxScore)
+			{
+				if(aOutfit!=null)
+				{
+					newAOutfitsWithScore.put(aOutfit, maxScore);					
+				}				
+				maxScore = aOutfitsWithScore.get(aOutfitsList.get(i));
+				aOutfit = aOutfitsList.get(i);		
+			}
+			else
+			{
+				newAOutfitsWithScore.put(aOutfitsList.get(i),  aOutfitsWithScore.get(aOutfitsList.get(i)));
+			}			
+		}
+		aOutfitsWithScore.clear();
+		aOutfitsWithScore.putAll(newAOutfitsWithScore);
+		return new Object[]{aOutfit,maxScore};		
+	}
+	
+	private void updateRecommendation()
+	{
+	
+		Map<AbstractOutfit,Float> aOutfitsWithScore = Recommender.getOutfitsList(new Integer(memberIdField.getText()),new Integer(garmentIdField.getText()));
+		Random r = new Random();
+	
+		JPanel recommendationsPanel;
+		recommendationsPanel = new JPanel();
+		recommendationsPanel.setLayout(new GridLayout(aOutfitsWithScore.size()+1,1));
+		
+		int maxNumOutfits = 0;
+		for(AbstractOutfit outfit : aOutfitsWithScore.keySet())
+			if(outfit.getGarments().size()>maxNumOutfits)
+				maxNumOutfits = outfit.getGarments().size();
+		
+		//List<AbstractOutfit> aOutfitsList = new LinkedList<AbstractOutfit>(aOutfitsWithScore.keySet());
+		//Initialize the panels
+		List<JPanel> outfitsPanels = new LinkedList<JPanel>();
+		DBConnection.transaction();
+		ConcreteGarmentI garment = (ConcreteGarmentI) DBConnection.session().get(ConcreteGarmentI.class,new Integer(garmentIdField.getText()));
+		BufferedImage garmentImage = loadImage(garment.getId());
+		ImageIcon icon = new ImageIcon( garmentImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+		JLabel imageLabel = new JLabel("cat:"+garment.getCategory().getId(),icon,SwingConstants.CENTER);
+		comp.add(imageLabel);		
+		panel.add(comp);	
+		recommendationsPanel.add(comp)
+		for(int i=0;i<aOutfitsWithScore.size();i++)
+		{
+			Object[] next = getNextAbstractOutfit(aOutfitsWithScore);			
+			AbstractOutfit aOutfit = (AbstractOutfit) next[0];
+			Float score = (Float) next[1];
+			ConcreteOutfitI outfit = (ConcreteOutfitI) aOutfit.getOutfits().iterator().next();//(r.nextInt(aOutfit.getOutfits().size()));
+			JPanel panel = new JPanel();
+			panel.setLayout(new GridLayout(1,maxNumOutfits));		
+			JLabel scoreLabel = new JLabel("score:"+score,SwingConstants.CENTER);
+			scoreLabel.setFont(new Font("default", Font.PLAIN, 8));
+			panel.add(scoreLabel);	
+			
+			List<ConcreteGarmentI> garments = new LinkedList<ConcreteGarmentI>((Collection<? extends ConcreteGarmentI>) outfit.getGarments());			
+			for(int j = 0;j<garments.size();j++)
+			{
+				JPanel comp = new JPanel();		
+				
+				//comp.setBorder(BorderFactory.createTitledBorder("garment: "+garments[i]));	
+				BufferedImage garmentImage = loadImage(garments.get(j).getId());
+				ImageIcon icon = new ImageIcon( garmentImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+				JLabel imageLabel = new JLabel("cat:"+garments.get(j).getCategory().getId(),icon,SwingConstants.CENTER);
+				imageLabel.setFont(new Font("default", Font.PLAIN, 8));
+				comp.add(imageLabel);		
+				panel.add(comp);					
+			}
+			for(int j=0;j<maxNumOutfits-aOutfit.getGarments().size();j++)
+			{
+				JPanel comp = new JPanel();			
+				ImageIcon icon = new ImageIcon(blackImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH));	
+				panel.add(comp);					
+			}
+				
+			recommendationsPanel.add(panel);	
+		}
+		
+		int oldHVal = 0;
+		int oldVVal = 0;
+		if(scroller!=null)
+		{
+			oldHVal = scroller.getHorizontalScrollBar().getValue();
+			oldVVal = scroller.getVerticalScrollBar().getValue();
+			remove(scroller);
+		}
+		scroller = new JScrollPane(recommendationsPanel); 
+		scroller.getHorizontalScrollBar().setUnitIncrement(20);
+		scroller.getVerticalScrollBar().setUnitIncrement(20);
+		scroller.getHorizontalScrollBar().setValue(oldHVal);
+	
+		
+		final int x = oldHVal;
+		final int y = oldVVal;
+		SwingUtilities.invokeLater(new Runnable() {
+		      public void run() {
+		    	  scroller.getViewport().setViewPosition(new java.awt.Point(x, y));
+		      }
+		});
+		
+		scroller.getVerticalScrollBar().setValue(oldVVal);
+		
+		add(scroller);
+		addComponentListener(this);
+		
+		componentResized(null);
+		revalidate();
+		repaint();		
+	}
+
+	
+	public static String convertToMultiline(String orig)
+	{
+	    return "<html>" + orig.replaceAll("\n", "<br>");
+	}
+		
+	
+
+	
+	protected BufferedImage loadImage(int garmentId)
+	{
+		BufferedImage myPicture = (BufferedImage) blackImage;
+    	try
+		{
+    	
+	    	myPicture = ImageIO.read(new File(Paths.BIG_IMAGES_FOLDER+garmentId+".jpg"));
+			
+		} catch (IOException e)
+		{
+		}
+    	
+    	return myPicture;
+	}
+
+	@Override
+	public void componentHidden(ComponentEvent e) {
+		// TODO Auto-generated method stub		
+	}
+
+	@Override
+	public void componentMoved(ComponentEvent e) {
+		// TODO Auto-generated method stubA
+		
+	}
+
+	@Override
+	public void componentResized(ComponentEvent e)
+	{
+		scroller.setPreferredSize(new Dimension(getSize().width,getSize().height-100));
+	    revalidate();
+	    repaint();
+	}
+
+	@Override
+	public void componentShown(ComponentEvent e) {
+		scroller.setPreferredSize(new Dimension(getSize().width,getSize().height-100));
+	    revalidate();
+	    repaint();		
+	}
+		
+	@Override
+	public void stateChanged(ChangeEvent arg0)
+	{
+	}
+	
+	
+	@Override
+	public void actionPerformed(ActionEvent e)
+	{
+
+		if(e.getSource().equals(go))
+		{
+			memberId = Integer.parseInt(memberIdField.getText());	
+			garmentId = Integer.parseInt(garmentIdField.getText());			
+			updateRecommendation();			
+		    revalidate();
+		    repaint();				
+		}	
+		
+	}
+}
+

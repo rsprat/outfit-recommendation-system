@@ -1,0 +1,420 @@
+package rob.ors.garmentsclustering.similarityMatrix;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import org.apache.log4j.Logger;
+
+import javax.imageio.ImageIO;
+
+import rob.ors.core.utils.GarmentRemover;
+import rob.ors.core.utils.Utils;
+
+import cern.colt.matrix.DoubleFactory2D;
+import cern.colt.matrix.DoubleFactory3D;
+import cern.colt.matrix.DoubleMatrix2D;
+import cern.colt.matrix.DoubleMatrix3D;
+
+public class CompoundSimilarityMatrix
+{
+	
+	private int counter = 0;
+	private Date computingStartDate;
+	private static Logger LOGGER = Logger.getLogger(CompoundSimilarityMatrix.class.getCanonicalName());
+	private DoubleMatrix3D similarityMatrix; //N*N matrix with the similarity between the pairs of the N garments
+	private HashMap<Integer,Integer> garmentIDRowNumber; //Store the maping between the garments id and the id they have in the similarityMatrix
+	private HashMap<Integer,Integer> rowNumberGarmentId; 
+	private CompoundSimilarityFunctionBuilder similarityFunctionBuilder;
+	protected static final DecimalFormat df = new DecimalFormat("#.##");
+
+	
+	public Integer[] getGarmentsIds()
+	{
+		return garmentIDRowNumber.keySet().toArray(new Integer[0]);
+	}
+	
+	public CompoundSimilarityMatrix(int[] garmentsIds, final CompoundSimilarityFunctionBuilder similarityFunctionBuilder)
+	{	
+	
+		this.similarityFunctionBuilder = similarityFunctionBuilder;
+		garmentIDRowNumber = new HashMap<Integer,Integer>(garmentsIds.length);
+		rowNumberGarmentId = new HashMap<Integer,Integer>(garmentsIds.length);
+		final Set<Integer> filteredGarmentsIds = new HashSet<Integer>();
+		for(int i=0; i<garmentsIds.length; i++)
+		{	
+			if(filteredGarmentsIds.add(garmentsIds[i])) //If the id wasn't in the outfit
+			{
+				Integer rowNumber = new Integer(filteredGarmentsIds.size()-1);
+				Integer garmentId = new Integer(garmentsIds[i]);
+				garmentIDRowNumber.put(garmentId,rowNumber); //Add the maping between the index in the matrix and the garment id
+				rowNumberGarmentId.put(rowNumber,garmentId);
+			}
+		}
+		
+		similarityMatrix = DoubleFactory3D.dense.make(similarityFunctionBuilder.getSimilarityFunctionBuilders().size(),filteredGarmentsIds.size(),filteredGarmentsIds.size(),-1);
+		
+
+		//Fill the similarity matrix with the similarity values
+		int[] indexes = new int[similarityFunctionBuilder.getSimilarityFunctionBuilders().size()];
+		for(int i=0;i<similarityFunctionBuilder.getSimilarityFunctionBuilders().size();i++)indexes[i]=i;
+		computeSimilarityMatrixComponents(indexes);		
+	}
+	
+	
+	public void removeGarment(int iid)
+	{	
+		//Remove the garment from the mappings garmentId-rowNumber and rowNumber-garmentId
+		int garmentRowNumber = garmentIDRowNumber.get(iid);	
+		HashMap<Integer,Integer> newGarmentIDRowNumber = new HashMap<Integer,Integer>(garmentIDRowNumber.size()-1);
+		HashMap<Integer,Integer> newRowNumberGarmentId = new HashMap<Integer,Integer>(garmentIDRowNumber.size()-1);
+		
+		/**
+		 * Make an exact copy of both maps until the index of the row is the same as the garment being deleted.
+		 * This garment is not added and, the following garments will have i-1 as index where i was their indeix in the old maps
+		 * In other words, remove the garment from the maps keeping the indexes consecutive.
+		 */
+		{
+			int i=0;
+			for(int k=0;k<garmentIDRowNumber.size();k++)
+			{
+				if(k!=garmentRowNumber)
+				{
+					newGarmentIDRowNumber.put(rowNumberGarmentId.get(k), i);
+					newRowNumberGarmentId.put(i, rowNumberGarmentId.get(k));
+					i++;
+				}
+			}
+		}
+
+		
+		DoubleMatrix3D tmp = (DoubleMatrix3D) similarityMatrix.clone();
+		similarityMatrix = DoubleFactory3D.dense.make(similarityFunctionBuilder.getSimilarityFunctionBuilders().size(),similarityMatrix.rows()-1,similarityMatrix.columns()-1);
+		for(int iid1:newGarmentIDRowNumber.keySet())
+		{
+			for(int iid2:newGarmentIDRowNumber.keySet())
+			{
+				for(int k=0;k<similarityMatrix.slices();k++)
+				{		
+					double val = tmp.get(k, garmentIDRowNumber.get(iid1), garmentIDRowNumber.get(iid2));
+					similarityMatrix.set(k, newGarmentIDRowNumber.get(iid1), newGarmentIDRowNumber.get(iid2), val);
+					
+				}
+				
+			}
+			
+		}
+		//replace the old mappings with the new ones
+		garmentIDRowNumber = newGarmentIDRowNumber;
+		rowNumberGarmentId = newRowNumberGarmentId;
+	}
+	
+	public CompoundSimilarityFunctionBuilder getSimilarityFunctionBuilder()
+	{
+		return similarityFunctionBuilder;
+	}
+	
+	/**
+	 * Recompute parts of the similarity matrix 
+	 * @param slices an array containing the index of the matrix components to be updated.
+	 * If the matrix has 3 components (3 slices) corresponding to 3 different distance functions, a valid parameter is any subset of [0,1,2]
+	 */
+	public void computeSimilarityMatrixComponents(final int[] slices)
+	{
+		
+		Date start = new Date();
+		computingStartDate = new Date();
+		LOGGER.info("Computing similarityMatrix slices: "+Arrays.toString(slices)+" for "+rowNumberGarmentId.keySet().size()+" garments");
+		class ComputeSimilarity implements Runnable
+		{
+			
+			int workerId;			
+			int numWorkers;
+			int sliceSize = 100;
+
+			CompoundSimilarityFunction similarityFunction;
+			
+			public ComputeSimilarity(int workerId, int numWorkers, CompoundSimilarityFunction similarityFunction)
+			{				
+				this.similarityFunction = similarityFunction;
+				this.workerId=workerId;
+				this.numWorkers=numWorkers;
+			}
+			
+			private int[] getSliceGarmentsIndex(int slice)
+			{
+				int[] indexes;				
+				if(slice==(rowNumberGarmentId.keySet().size()/sliceSize)-1)//Is the last slice, add the rounding
+				{
+					indexes = new int[rowNumberGarmentId.keySet().size()-slice*sliceSize];					
+				}
+				else indexes = new int[sliceSize];
+				for(int i=0;i<indexes.length;i++)indexes[i]=(slice*sliceSize)+(i*1);
+				return indexes;
+			}
+			
+			private int[] getGarmentsIdsFromIndex(int[] indexes)
+			{
+				int ids[] = new int[indexes.length];
+				for(int i=0;i<indexes.length; i++)ids[i]=rowNumberGarmentId.get(indexes[i]);
+				return ids;
+			}
+			
+			
+			private void computeMatrixPortion(int vSlice,int hSlice)
+			{
+				try{
+					
+				
+				int[] vGarments = getSliceGarmentsIndex(vSlice);
+				//LOGGER.finest(Arrays.toString(getGarmentsIdsFromIndex(vGarments)));
+				int[] hGarments = getSliceGarmentsIndex(hSlice);
+				//LOGGER.finest(Arrays.toString(getGarmentsIdsFromIndex(hGarments)));
+				Date start = new Date();
+				//LOGGER.finest("Loading slice ["+vSlice+","+hSlice+"]images ");
+				if(vSlice==hSlice) similarityFunction.loadImages(getGarmentsIdsFromIndex(vGarments));
+				else 
+				{
+					similarityFunction.loadImages(getGarmentsIdsFromIndex(vGarments));
+					similarityFunction.loadImages(getGarmentsIdsFromIndex(hGarments));
+				}
+				Date end = new Date();
+				
+				//LOGGER.finest("Done loading slice ["+vSlice+","+hSlice+"] images took "+df.format((float)(end.getTime()-start.getTime())/1000)+" s");
+					
+				int count = 0;
+				int rOffoutfit = sliceSize*vSlice;
+				int cOffoutfit = sliceSize*hSlice;
+				
+				for(int r=0;r<vGarments.length;r++)
+				{
+					for(int c=r;c<hGarments.length;c++)
+					{
+						//LOGGER.info(rowNumberGarmentId.get(vGarments[r])+"-"+ rowNumberGarmentId.get(hGarments[c]));
+						double sim[] = similarityFunction.getSimilarityComponents(rowNumberGarmentId.get(vGarments[r]), rowNumberGarmentId.get(hGarments[c]),slices);
+						counter+=2;
+						for(int s:slices)
+						{
+							similarityMatrix.set(s,c+cOffoutfit, r+rOffoutfit,sim[s]);
+							similarityMatrix.set(s,r+rOffoutfit, c+cOffoutfit,sim[s]);
+						}			
+						if(++count%200==0) System.gc();
+						if(counter!=0 && counter%((int)(rowNumberGarmentId.keySet().size()*rowNumberGarmentId.keySet().size()*0.01))==0)
+						{
+							Date now = new Date();
+							
+							float comp = ((float)counter)/(rowNumberGarmentId.keySet().size()*rowNumberGarmentId.keySet().size());			
+							long remainingTime = (long) ((now.getTime()-computingStartDate.getTime())/comp);
+							long remainingHours = ((int)remainingTime/(3600*1000));
+	
+							Date endDate = new Date(remainingTime+computingStartDate.getTime());								
+							long timeDiff = Math.abs(endDate.getTime() - now.getTime());								
+							String remaining  = String.format("%dh%d'", TimeUnit.MILLISECONDS.toHours(timeDiff),TimeUnit.MILLISECONDS.toMinutes(timeDiff) - TimeUnit.HOURS.toMinutes(TimeUnit.MILLISECONDS.toHours(timeDiff)));
+							
+							String estimatedEnd=endDate.getHours()+":"+endDate.getMinutes()+":"+endDate.getSeconds();
+							LOGGER.info(" Completed "+df.format(comp*100)+"% "+counter+" remaining: "+remaining+" end:"+estimatedEnd);
+						}
+					}
+					float percent = (((float)(r))/vGarments.length)*100;
+					if(percent%20==0)
+					{						
+						//LOGGER.finest("Slice ["+vSlice+","+hSlice+"] =>"+df.format(percent)+"%");
+					}
+				}
+				}catch(Exception ex)
+				{ex.printStackTrace();}
+				similarityFunction.matrixSliceChange();
+				similarityFunction.clearImages();
+
+				
+			}
+			@Override
+			public void run() {
+				 
+				if(sliceSize>rowNumberGarmentId.keySet().size())sliceSize=rowNumberGarmentId.keySet().size();
+				if(sliceSize==0)return;
+				for(int vSlice = workerId; vSlice<(rowNumberGarmentId.keySet().size()/sliceSize);vSlice+=numWorkers)
+				{
+					for(int hSlice = 0; hSlice<(rowNumberGarmentId.keySet().size()/sliceSize);hSlice+=1)
+					{			
+						Date start = new Date();
+						computeMatrixPortion(vSlice,hSlice);
+						Date end = new Date();
+						//LOGGER.finer("Slice ["+vSlice+","+hSlice+"] done by worker "+workerId+" took "+df.format((float)(end.getTime()-start.getTime())/1000)+" s");
+					}
+					
+				}
+				
+			}
+			
+		}
+				
+		//Creates and starts all threads
+		int numThreads = 1;
+		Thread[] threads = new Thread[numThreads];
+	
+		
+		for(int i=0; i<numThreads;i++)
+		{
+			//LOGGER.fine("Startet thread "+i);
+			threads[i] = new Thread(new ComputeSimilarity(i, numThreads,(CompoundSimilarityFunction)similarityFunctionBuilder.build()));
+			threads[i].start();
+			
+		}
+		
+		//Wait for all the threads
+		for(int i=0; i<numThreads;i++)
+		{
+			try {
+				threads[i].join();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+		Date end = new Date();
+		LOGGER.info("End computing similarity matrix for "+rowNumberGarmentId.keySet().size()+" garments, took "+df.format((float)(end.getTime()-start.getTime())/1000)+" s");
+		//LOGGER.info(similarityMatrix.toString());
+
+	}
+	
+	public double getSimilarity(int anGarmentId, int anotherGarmentId)
+	{
+		int x = getRowNumber(anGarmentId);
+		int y = getRowNumber(anotherGarmentId);
+		double val = 0;
+		for(int s=0;s<similarityMatrix.slices();s++) val+=(similarityMatrix.get(s, x, y)*similarityFunctionBuilder.getSimilarityFunctionWeights()[s]);
+		return val;
+	}
+	
+	public double[] getSimilarityComponents(int anGarmentId, int anotherGarmentId)
+	{
+		int x = getRowNumber(anGarmentId);
+		int y = getRowNumber(anotherGarmentId);
+		double[] val = new double[similarityMatrix.slices()];
+		for(int s=0;s<similarityMatrix.slices();s++) val[s]=similarityMatrix.get(s, x, y);
+		return val;
+	}
+	public int getGarmentId(int index)
+	{
+		return rowNumberGarmentId.get(index);
+	}
+	
+	public int getRowNumber(int garmentId)
+	{
+		return garmentIDRowNumber.get(garmentId);
+	}
+	
+	public DoubleMatrix2D getSimilarityMatrix()
+	{
+		DoubleMatrix2D jointMatrix = DoubleFactory2D.dense.make(similarityMatrix.rows(), similarityMatrix.columns());
+		int numWeights = similarityFunctionBuilder.getSimilarityFunctionWeights().length;
+		for(int i = 0; i<similarityMatrix.rows();i++)
+		{
+			for(int j=0; j<similarityMatrix.columns(); j++)
+			{
+				double val = 0;
+				for(int s=0;s<similarityMatrix.slices() && s<numWeights;s++) val+=similarityMatrix.get(s, i, j)*similarityFunctionBuilder.getSimilarityFunctionWeights()[s];
+				jointMatrix.set(i, j, val);
+				jointMatrix.set(j, i, val);
+			}
+		}
+		return jointMatrix;
+	}
+	
+	public SimilarityFunction getSimilarityFunction()
+	{
+		return similarityFunctionBuilder.build();
+	}
+
+	public void writeToFile(String path) throws IOException
+	{
+		FileWriter fw = new FileWriter(path);
+		BufferedWriter writer = new BufferedWriter(fw);
+		writer.write(new Date().toGMTString()+"\n");
+		writer.write("#SimFunctions:"+similarityMatrix.slices()+"\n");
+		for(Integer rowNumber : rowNumberGarmentId.keySet())
+		{
+			writer.write(rowNumber+";"+rowNumberGarmentId.get(rowNumber)+"\n");
+		}
+		
+		for(int s=0;s<similarityMatrix.slices();s++)
+		{
+			writer.write("######"+similarityFunctionBuilder.getSimilarityFunctionBuilders().get(s).getClass().getName()+"\n");			
+			for(int j = 0; j<rowNumberGarmentId.size();j++)
+			{
+				for(int i=0; i<=j;i++)
+				{									
+					writer.write(df.format(similarityMatrix.get(s,j, i))+";");
+				}
+				writer.write("\n");
+			}
+			
+		}
+
+		writer.close();
+		fw.close();
+
+		
+	}
+	
+	
+	
+	
+	public void readFile(String file) throws IOException
+	{
+		FileReader inputStream = new FileReader(file);
+		BufferedReader reader = new BufferedReader(inputStream);
+
+		garmentIDRowNumber = new HashMap<Integer,Integer>();
+		rowNumberGarmentId = new HashMap<Integer,Integer>();
+		String line;
+		line = reader.readLine();//Skip timestamp line
+		line = reader.readLine();
+
+		int slices = Integer.parseInt(line.split(":")[1]);//Get the number of slices of the matrix (the number of similarity functions)
+		while(!(line = reader.readLine()).contains("######"))
+		{
+			String[] vals = line.split(";");
+			Integer garmentId = new Integer(vals[1]);
+			Integer rowId = new Integer(vals[0]);
+			garmentIDRowNumber.put(garmentId, rowId);
+			rowNumberGarmentId.put(rowId, garmentId);			
+		}
+		similarityMatrix = DoubleFactory3D.dense.make(slices,garmentIDRowNumber.size(),garmentIDRowNumber.size());
+		for(int s =0; s<slices;s++)
+		{
+			for(int i=0;i<garmentIDRowNumber.size();i++)
+			{
+				line = reader.readLine();
+				String[] vals = line.split(";");
+
+				for(int j=0; j<vals.length-1;j++){
+					double val = new Double(vals[j].replace(",","."));
+					if(val==0) val=0.0001f;//Replace any 0 value with a very low one to avoid exceptions on the clustering phase
+					similarityMatrix.set(s,i, j, val);
+					similarityMatrix.set(s,j, i, val);
+				}
+			}	
+			reader.readLine();
+		}
+
+		reader.close();
+		inputStream.close();
+		
+		Collection<Integer> garmentIds = garmentIDRowNumber.keySet();
+		for(int iid:garmentIds)if(!Utils.hasImage(iid) || GarmentRemover.isBlackListed(iid))removeGarment(iid);//Remove the garments without image
+
+	}
+	
+}

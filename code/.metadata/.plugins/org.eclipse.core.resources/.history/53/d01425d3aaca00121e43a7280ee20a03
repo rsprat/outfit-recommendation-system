@@ -1,0 +1,418 @@
+package descProcess;
+
+
+import java.awt.Point;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.*;
+
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.validation.Schema;
+import javax.xml.validation.SchemaFactory;
+
+import org.hibernate.metamodel.relational.Tuple;
+import org.junit.experimental.max.MaxCore;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+
+import Attribute.AttributeD;
+import Attribute.CategoricalAttribute;
+import Attribute.AttributesDictionary;
+import Attribute.CompoundAttribute;
+import Attribute.IntAttribute;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.informationGathering.CSVReader.CSVReader;
+import rob.crs.informationGathering.CSVReader.ItemsCSVReader;
+import rob.crs.informationGathering.clustering.ModelInstanceConverter;
+import weka.core.Attribute;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+
+public class DescriptionProcessor {
+	
+
+	public static List<Element> elements(Node parent) {
+	    List<Element> result = new LinkedList<Element>();
+	    NodeList nl = parent.getChildNodes();
+	    for (int i = 0; i < nl.getLength(); ++i) {
+	        if (nl.item(i).getNodeType() == Node.ELEMENT_NODE)
+	            result.add((Element) nl.item(i));
+	    }
+	    return result;
+	}
+	
+	public static Map<String,Integer> merge(List<Map<String,Integer>> maps)
+	{
+		Map<String,Integer> expressions = new HashMap<String,Integer>();
+		for(Map<String,Integer> itemExpressions:maps)
+		{			
+			for(String expression:itemExpressions.keySet())
+			{
+				
+				if(expressions.containsKey(expression))
+					expressions.put(expression,expressions.get(expression)+itemExpressions.get(expression));
+				else
+					expressions.put(expression,itemExpressions.get(expression));
+			}
+		}
+		return expressions;
+	}
+	
+	public static Map<String,Integer> countExpressions(List<ConcreteItem> items, int expressionLen)
+	{
+
+		LinkedList<Map<String,Integer>> expressions = new LinkedList<Map<String,Integer>> ();		
+		for(ConcreteItem item:items)		
+			expressions.push(countExpressions(item,expressionLen));		
+		return merge(expressions);
+	}
+	
+	private static String concatenate(String[] in)
+	{
+		String out ="";
+		for(int i=0;i<in.length-1;i++)out+=in[i]+" ";
+		out+=in[in.length-1];
+		return out;		
+	}
+	
+	public static Map<String,Integer> countExpressions(ConcreteItem item,int expressionLen)
+	{
+		Map<String,Integer> expressions = new HashMap<String,Integer>();
+		//System.out.println(item.getDescription());
+		String[] desc = item.getDescription().split(" ");
+		
+		for(int i=0;i<desc.length;i++)
+		{
+			String expr = concatenate(Arrays.copyOfRange(desc, i, Math.min(i+expressionLen, desc.length)));
+			if(expressions.containsKey(expr))			
+				expressions.put(expr, expressions.get(expr)+1);
+			else
+				expressions.put(expr, 1);			
+		}		
+		//printExpressions(expressions,1);
+		return expressions;
+	}
+	
+	public static Map<String,Integer> filter(Map<String,Integer> originalMap, int minItems)
+	{
+		Map<String,Integer> resultMap = new HashMap<String,Integer>();
+		for(String expression: originalMap.keySet())
+			if(originalMap.get(expression)>=minItems)
+				resultMap.put(expression, originalMap.get(expression));
+		return resultMap;
+	}
+	
+	public static void printExpressions(Map<String,Integer> expressions,int numItems)
+	{
+		LinkedList<Object[]> list = new LinkedList<Object[]>();
+		for(String expression:expressions.keySet()) list.add(new Object[]{expression,expressions.get(expression)});
+		
+		Collections.sort(list, new Comparator() {
+			@Override
+			public int compare(Object o1, Object o2) {				
+				return ((Integer)((Object[])o1)[1])-((Integer)((Object[])o2)[1]);
+			}
+		});
+		float factor = 100.0f/numItems;
+		
+		for(Object[] obj:list)
+		{
+			System.out.println(obj[0]);
+			//System.out.println(obj[0]+"=>"+obj[1]+"=>"+(((Integer)obj[1]).floatValue()*factor));
+		}
+	}
+	
+	public static void findWords(String wordsFileName, final Map<String,Integer> terms)
+	{
+		//final Set<String> terms = new HashSet<String>();
+		CSVReader reader = new CSVReader() {
+			
+			@Override
+			protected void process(String[] line) {
+				for(String term:line)
+					if(terms.containsKey(term))
+						System.out.println(term+"=>"+terms.get(term));
+			}
+		};
+	}
+	
+	public static List<String> createSynonyms(String base, List<Element> autoSynonyms)
+	{
+		LinkedList<String> vals = new LinkedList<String>();
+		vals.push(" "+base+" ");
+		
+		for(Element autoSynonym: autoSynonyms)
+		{			
+			switch(autoSynonym.getNodeName())
+			{
+				case "append":
+					String toAppend = autoSynonym.getAttribute("term");
+					vals.push(" "+base+toAppend);
+					break;
+			}
+			
+		}
+		return vals;
+	}
+
+	private static boolean match(String haystack, Collection<String> needels)
+	{
+		for(String needel:needels)
+			if(haystack.contains(needel)) return true;
+		return false;
+				
+	}
+	
+	private static boolean hasValue(ConcreteItem item, Element value, List<Element> autoSynonyms)
+	{
+		String desc = item.getDescription().toLowerCase();
+		desc = desc.replaceAll("-", " ");
+		List<String> synonyms = createSynonyms(value.getAttribute("name"), autoSynonyms);
+		for(Element synonym : elements(value))
+		{
+			
+			String val = synonym.getAttribute("name");
+			synonyms.addAll(createSynonyms(val, autoSynonyms));
+		}	
+		return match(desc,synonyms);
+	}
+	
+	
+	
+	
+	
+	
+	public static void getAttributesFromDescription(Item item)
+	{
+		try
+		{	
+			Document doc = getAttributesDocument();
+			doc.getDocumentElement().normalize();
+			
+	
+				NodeList attributes = doc.getElementsByTagName("attribute");
+				for(int i=0;i<attributes.getLength();i++)
+				{
+					Element attribute = (Element)attributes.item(i);
+					if(attribute.getAttribute("source")!="" && attribute.getAttribute("source")!="description") //Its not a description attribute
+						continue;
+					List<Element> autoSynonym =  elements(attribute.getElementsByTagName("automatic-synonyms").item(0));
+					List<Element> values = elements(attribute.getElementsByTagName("values").item(0));
+					for(int j=0;j<values.size();j++)
+					{
+					
+						if(hasValue((ConcreteItem)item,values.get(j),autoSynonym))							
+						{
+							int valueId = new Integer(values.get(j).getAttribute("id"));
+							
+							String attributeName = attribute.getAttribute("name");
+							Integer attributeId = new Integer(attribute.getAttribute("id"));
+							String attributeValue = values.get(j).getAttribute("name");
+							
+							String select = attribute.getAttribute("select");
+							if(select=="")select="longest";
+							//String currentValue = item.getAttributes().get(attributeName);
+							switch(select)
+							{
+							/*
+							case "longest":								
+								if(currentValue==null || attributeValue.length()>currentValue.length())
+									item.getAttributes().put(attributeName, attributeValue);
+								break;	
+							case "first":
+								if(currentValue==null || item.getDescription().indexOf(currentValue)>item.getDescription().indexOf(attributeValue))
+									item.getAttributes().put(attributeName, attributeValue);
+								break;
+							case "multiple":
+								if(currentValue==null)currentValue="";
+								item.getAttributes().put(attributeName, currentValue+attributeValue+", ");
+								break;
+								
+								*/
+							default:
+								item.getAttributes().put(attributeId, valueId);
+							}
+						}
+					}	
+				}
+			}catch(Exception e){e.printStackTrace();}
+			
+	}
+	
+
+	
+	public static void print(ConcreteItem item,AttributesDictionary dict)
+	{
+		System.out.println("Item: "+item.getDescription());
+		for(Integer key: item.getAttributes().keySet())
+		{
+			String attrName = dict.attributeName(key);	
+			if(dict.getAttributes().get(key).getType()==AttributeD.TYPE.CATEGORICAL)
+			{						
+				String valueName = dict.valueName(key, item.getAttributes().get(key));
+				System.out.println(attrName+"->"+valueName);
+			}
+			else
+			{
+				System.out.println(attrName+"->"+item.getAttributes().get(key));
+			}
+				
+
+		}
+		System.out.println("====================");
+	}
+	
+	public static Document getAttributesDocument()
+	{
+		Document doc = null;
+		try{
+			File attributesFile = new File("E:/MyDocuments/get-dressed/code/informationGathering/src/descProcess/attributes.xml");
+			//File attributesFile = new File(ConfigReader.getAttribute("attributesFile"));
+			DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+			dbFactory.setIgnoringElementContentWhitespace(true);
+			dbFactory.setNamespaceAware(true);
+			final SchemaFactory sf = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
+	
+			/*dbFactory.setValidating(true);  
+			File attributesSchema = new File("E:/MyDocuments/get-dressed/code/informationGathering/src/descProcess/attributesSchema.xsd");
+			//File attributesSchema = new File(ConfigReader.getAttribute("attributesSchema"));
+			final Schema schema = sf.newSchema(attributesSchema);
+			dbFactory.setSchema(schema);*/
+			doc = dBuilder.parse(attributesFile);		
+		}catch(Exception e){e.printStackTrace();}		
+		return doc;
+	}
+	
+	
+	public static AttributesDictionary buildDictionary()
+	{
+		AttributesDictionary attributesDict = new AttributesDictionary();	
+		Document doc = getAttributesDocument();
+		NodeList attributes = doc.getElementsByTagName("attribute");
+		
+		for(int i=0;i<attributes.getLength();i++)
+		{
+			
+			Element attribute = (Element)attributes.item(i);
+			Integer attrId = new Integer(attribute.getAttribute("id"));
+			String attrName = attribute.getAttribute("name");
+			String type = attribute.getAttribute("type");
+			if(type=="")
+				type="categorical";
+			switch(type)
+			{
+				case "categorical":
+					CategoricalAttribute valuesDict = new CategoricalAttribute(attrName,attrId);
+					List<Element> values = elements(attribute.getElementsByTagName("values").item(0));
+					for(Element value: values)					
+						valuesDict.addAttribute(new Integer(value.getAttribute("id")), value.getAttribute("name"));
+					attributesDict.addAttribute(attrId, attrName, valuesDict);
+					break;
+					
+				case "compound":
+					CompoundAttribute comp = new CompoundAttribute(attrName, attrId);
+					List<Element> components = elements(attribute.getElementsByTagName("components").item(0));
+					for(Element component: components)			
+					{
+						AttributeD compAttr = new IntAttribute(component.getAttribute("name"), new Integer(component.getAttribute("id")));
+						comp.addAttribute(compAttr);
+					}		
+					attributesDict.addAttribute(attrId, attrName, comp);
+					break;
+			}
+			
+			
+		}
+		return attributesDict;
+	}
+	
+	/*public static Map<Integer,String> getAttributesIdName()
+	{
+		Map<Integer,String> map = new HashMap<Integer,String>();	
+		Document doc = getAttributesDocument();
+		NodeList attributes = doc.getElementsByTagName("attribute");
+		for(int i=0;i<attributes.getLength();i++)
+		{
+			Element attribute = (Element)attributes.item(i);		
+			map.put(new Integer(attribute.getAttribute("id")),attribute.getAttribute("name"));
+		}
+		return map;
+	}
+	
+	public static Map<Integer,String> getAttributeValuesIdName(int attributeId)
+	{
+		Map<Integer,String> map = new HashMap<Integer,String>();	
+		Document doc = getAttributesDocument();
+		NodeList attributes = doc.getElementsByTagName("attribute");
+		Element attribute = (Element)attributes.item(attributeId);
+		map.put(new Integer(attribute.getAttribute("id")),attribute.getAttribute("name"));
+		List<Element> values = elements(attribute.getElementsByTagName("values").item(0));
+		for(Element value: values)
+		{			
+			map.put(new Integer(value.getAttribute("id")), value.getAttribute("name"));
+		}	
+		return map;		
+	}*/
+	
+				
+	public static void main(String[] args)
+	{
+		AttributesDictionary dict = buildDictionary();	
+		DBConnection.session().beginTransaction();
+		//List<ConcreteItem> items = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI where category_id = "+11).list();
+		List<ConcreteItem> items = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI ").list();
+		FastVector fvWekaAttributes = new FastVector( ModelInstanceConverter.ATTRIBUTES.keySet().size());
+		for(Attribute attribute : ModelInstanceConverter.ATTRIBUTES.values())
+		{
+			fvWekaAttributes.addElement(attribute);
+		}
+		Instances instances = new Instances("items",fvWekaAttributes,items.size());
+
+		
+		for(Item item: items)
+		{			
+			String desc = ((ConcreteItem)item).getDescription();
+			if(desc == null || desc.equals("None"))continue;
+			getAttributesFromDescription(item);
+			print((ConcreteItem) item,dict);		
+			//Instance inst = ModelInstanceConverter.toInstance(item, instances, dict);
+			//ModelInstanceConverter.printInstance(inst, dict);
+			System.out.println("***************************************");
+			System.out.println("***************************************");
+			//PolyvoreCategoryTree.getCategoryById(item.getId()).getItems().add((ConcreteItem)item);
+		}
+
+
+
+		/*LinkedList<	Map<String,Integer>> expressions = new LinkedList<	Map<String,Integer>>();
+		LinkedList<Item> evalItems = new LinkedList<Item>(PolyvoreCategoryTree.getSubtreeItems(3));
+		for(int i=1;i<=4;i++)
+			expressions.push(countExpressions(evalItems,i));
+		
+		
+		Map<String,Integer> expr = merge(expressions);
+		expressions.clear();
+
+		printExpressions(filter(expr,3),evalItems.size());	
+		System.out.println("--------->"+evalItems.size());
+		//PolyvoreCategoryTree.displayItemsPerCategory();
+		 * 
+		 */
+	}
+	
+
+}

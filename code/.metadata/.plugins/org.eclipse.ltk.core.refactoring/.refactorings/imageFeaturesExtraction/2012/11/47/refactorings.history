@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename local variable &apos;absolutePatchSize&apos; in &apos;rob.crs.imgfeaturesextraction.imageProcessing.HistogramExtractor.getHSPatchHistogram(...)&apos; to &apos;relativePatchSize&apos;&#x0A;- Original project: &apos;imageFeaturesExtraction&apos;&#x0A;- Original element: &apos;rob.crs.imgfeaturesextraction.imageProcessing.HistogramExtractor.getHSPatchHistogram(int, float).absolutePatchSize&apos;&#x0A;- Renamed element: &apos;absolutePatchSize&apos;&#x0A;- Update references to refactored element" description="Rename local variable &apos;absolutePatchSize&apos;" id="org.eclipse.jdt.ui.rename.local.variable" input="/src&lt;rob.crs.imgfeaturesextraction.imageProcessing{HistogramExtractor.java[HistogramExtractor~getHSPatchHistogram~I~F@absolutePatchSize!1293!1315!1299!1315!F!0!true" name="relativePatchSize" references="true" stamp="1353431159221" version="1.0"/>
+</session>

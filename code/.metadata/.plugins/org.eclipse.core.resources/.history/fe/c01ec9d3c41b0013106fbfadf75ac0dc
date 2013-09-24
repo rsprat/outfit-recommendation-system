@@ -1,0 +1,183 @@
+package rob.ors.informationGathering.CSVReader;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.log4j.Logger;
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.ConcreteOutfit;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.api.Member;
+import rob.ors.core.model.impl.ConcreteOutfitI;
+import rob.ors.core.model.impl.MemberI;
+
+/***
+ * Class for reading Members CSV files
+ * @author rsprat
+ *
+ */
+
+public class MemberCSVReader extends CSVReader{
+	Map<Integer,Member>  membersSummary;
+	private static final Logger LOGGER = Logger.getLogger(MemberCSVReader.class.getCanonicalName());
+	public MemberCSVReader()
+	{
+		//Reads the summary of the members in the file Paths.CAPTURED_DATA_FOLDER+"user_summary.txt"
+		MemberSummaryCSVReader reader = new MemberSummaryCSVReader();		
+		reader.readFile(Paths.CAPTURED_DATA_FOLDER+"user_summary.csv");
+		membersSummary = reader.members;
+	}
+	
+	
+	@Override
+	protected void process(String[] line) {
+		if(line[0].equals("UNKNOWN")) return;//The UID is not valid
+		Integer uid = new Integer(line[0]);		
+		LOGGER.info(""+uid);
+		DBConnection.transaction();
+		/**Get the instance of the member from the DB or creat it */
+		List<Member> members = DBConnection.session().createQuery("from MemberI WHERE id="+uid).list();
+		Member member;
+		if(members.size()==0)
+		{ 
+			//Create a new member
+			member = new MemberI(uid, "NULL");
+			LOGGER.info("Creating member");
+			DBConnection.session().save(member);
+		}
+		else
+		{
+			//Load existing one
+			member = members.get(0);
+			//If member is complete, skip it
+			if(member.getComplete())
+			{
+				LOGGER.info("Member visited");
+				return;
+			}			
+		}
+		
+		
+		fillMemberSummary(member);
+			
+			
+		
+		/*Process the data of the outfits created by the member*/
+		Set<rob.ors.core.model.api.Outfit> outfits = new HashSet<rob.ors.core.model.api.Outfit>();//Resulting list of outfits for the member
+		for(String sid : line[1].split(","))//For each outfit in the list of outfits of the member
+		{
+			List<rob.ors.core.model.api.Outfit> dboutfits = DBConnection.session().createQuery("from ConcreteOutfitI WHERE id="+sid).list();
+			rob.ors.core.model.api.Outfit outfit;
+			if(dboutfits.size()==0)//The outfit doesn't exists in the DB, create it
+			{
+				outfit = new ConcreteOutfitI(new Integer(sid), member);
+				DBConnection.session().save(outfit);
+				LOGGER.info("New outfit");
+			}
+			else //The outfit exists in the DB, read and update it
+			{
+				outfit = dboutfits.get(0);
+				//Update the owner of the outfit (it may be null)
+				member.getMemberOutfits().add((ConcreteOutfit) outfit);
+				((ConcreteOutfit)outfit).setMember(member);
+			}
+			
+			outfits.add(new ConcreteOutfitI(new Integer(sid), member));
+			LOGGER.info("Add member outfit id:"+sid);
+		}
+		
+		/*Process the data of the outfits liked by the member*/
+		outfits = new HashSet<rob.ors.core.model.api.Outfit>();
+		for(String sid : line[2].split(","))
+		{
+			if(sid.equals("UNKNOWN"))
+			{
+				LOGGER.info("Setid is unknown");
+			}
+			else
+			{
+				/*Search the outfit in the db or create it*/
+				rob.ors.core.model.api.Outfit outfit;
+				List<rob.ors.core.model.api.Outfit> dboutfits = DBConnection.session().createQuery("from ConcreteOutfitI WHERE id="+sid).list();
+				if(dboutfits.size()==0) outfit = new ConcreteOutfitI(new Integer(sid), null);
+				else outfit = dboutfits.get(0);
+				outfits.add(outfit);
+				LOGGER.info("Add liked outfit id:"+sid);
+			}
+		}
+		
+		/*Member following*/
+		HashSet<Member> followedMembers = new HashSet<Member>();
+		for(String memberData: line[3].split(","))
+		{
+			Member u = parseMember(memberData);
+			if(u!=null)member.getFollowing().add(u);
+
+		}
+		
+		HashSet<Member> followerMembers = new HashSet<Member>();
+		for(String memberData: line[3].split(","))
+		{
+			Member u = parseMember(memberData);
+			if(u!=null)member.getFollowers().add(u);
+		}
+		DBConnection.session().update(member);
+		DBConnection.session().getTransaction().commit();
+		
+	}
+	/**
+	 * Load the member summary for the member with the data read from the memberSummary file.
+	 * @param member
+	 */
+	private void fillMemberSummary(Member member)
+	{
+		Member memberSummary = membersSummary.get(member.getId());
+		if(memberSummary!=null)
+		{
+			LOGGER.info("Copying summary");
+			member.setNumTrophies(memberSummary.getNumTrophies());
+			member.setNumOutfitLikes(memberSummary.getNumOutfitLikes());
+			member.setNumFollowers(memberSummary.getNumFollowers());
+			member.setNumOutfitViews(memberSummary.getNumOutfitViews());
+			member.setComplete(true);
+		}
+		
+		
+	}
+	/**
+	 * Given a string of the form uid:uname with uid being an member id and uname an member name, 
+	 * tries to find a member with the given id or the given name.
+	 * If the member doesn't exists in the DB, creates it
+	 * @param nameAndUid
+	 * @return
+	 */
+	protected Member parseMember(String nameAndUid)
+	{
+		String uid = nameAndUid.split(":")[1];
+		if(nameAndUid.split(":").length==1 ||uid.equals("UNKNOWN") ) return null;
+		String uname = nameAndUid.split(":")[0];
+		LOGGER.info("Parsing member "+uid+" "+uname);
+
+		
+		List<Member> members = DBConnection.session().createQuery("from MemberI WHERE id="+uid).list();
+		if(members.size()==0) members =  DBConnection.session().createQuery("from MemberI WHERE name= '"+uname+"'").list();
+		
+		Member member;
+		if(members.size()==0)
+		{ 
+			member = new MemberI(new Integer(uid), uname);
+			DBConnection.session().save(member);
+		}
+		else
+		{
+			member = members.get(0);
+			LOGGER.info("Already in DB");
+		}
+		fillMemberSummary(member);		
+		return member;				
+	}
+	
+	
+};

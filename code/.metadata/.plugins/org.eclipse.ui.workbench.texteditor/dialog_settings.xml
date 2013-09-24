@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
+		<item value="613" key="DIALOG_WIDTH"/>
+		<item value="272" key="DIALOG_Y_ORIGIN"/>
+		<item value="973" key="DIALOG_X_ORIGIN"/>
+		<item value="529" key="DIALOG_HEIGHT"/>
+		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
+		<item value="true" key="wrap"/>
+		<item value="true" key="casesensitive"/>
+		<item value="false" key="isRegEx"/>
+		<item value="false" key="incremental"/>
+		<item value="false" key="wholeword"/>
+		<item value="load" key="selection"/>
+		<list key="findhistory">
+			<item value="loa"/>
+			<item value="load"/>
+			<item value="LOGG"/>
+			<item value="log"/>
+			<item value="releasing"/>
+			<item value="dress"/>
+			<item value="createSimilarityMatrix"/>
+			<item value="distnorm2"/>
+		</list>
+		<list key="replacehistory">
+			<item value="Member"/>
+			<item value="member"/>
+			<item value="\\"/>
+			<item value="4"/>
+			<item value="synonym"/>
+			<item value=" "/>
+			<item value="cvCloneImage(blackImage)"/>
+		</list>
+	</section>
+</section>

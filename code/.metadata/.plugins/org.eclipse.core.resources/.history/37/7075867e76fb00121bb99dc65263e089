@@ -1,0 +1,178 @@
+package rob.ors.core.utils;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
+
+import org.apache.log4j.Logger;
+
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.DBConnection;
+
+public class ItemRemover
+{
+	private static Logger LOGGER = Logger.getLogger(ItemRemover.class.getCanonicalName());
+	public static void removeItemFromFile(String path)
+	{
+		try {
+		    BufferedReader in = new BufferedReader(new FileReader(path));
+		    String str;
+		    while ((str = in.readLine()) != null) {
+		    	try{
+		        removeItem(new Integer(str));
+		    	}catch(Exception ex){LOGGER.error("Error deleting "+str,ex);}
+		    }
+		    in.close();
+		} catch (IOException e) {
+		}
+		
+		
+	}
+	/**
+	 * Move the item image from the smallImagesFolder to the toRemoveImagesFolder
+	 * @param itemId
+	 */
+	private static void moveItemImage(int itemId)
+	{
+		try
+		{			
+			File afile =new File(Paths.SMALL_IMAGES_FOLDER+itemId+".jpg");		
+			if(afile.exists())
+			{
+				if(afile.renameTo(new File(Paths.TO_REMOVE_IMAGES_FOLDER+itemId+".jpg")))
+				{
+					LOGGER.info(String.format("Moving item %i image file to deletion folder",itemId));
+				}
+				else
+				{
+					LOGGER.equals(String.format("Failed to move  item %i image file to deletion folder",itemId));				
+				}
+			}
+		}catch(Exception e){}
+	}
+	
+	
+	/**
+	 * Remove the item with the given id.
+	 * REmove it from the DB, add it to the no items file and add it to the noitems table.
+	 * Move its image to a quarentene folder
+	 * @param itemId
+	 */
+	public static void removeItem(int itemId)
+	{
+		DBConnection.transaction();
+		LOGGER.info("Deleting item "+itemId);
+		DBConnection.session().createSQLQuery("DELETE FROM SetComponents WHERE item_id ="+itemId).executeUpdate();
+		
+		DBConnection.session().createSQLQuery("DELETE FROM Item WHERE id ="+itemId).executeUpdate();	
+		DBConnection.session().createSQLQuery("DELETE FROM SetComponents WHERE item_id ="+itemId).executeUpdate();
+		if(!isBlackListed(itemId))DBConnection.session().createSQLQuery("INSERT INTO noitem values("+itemId+")").executeUpdate(); //Add the item to the black list		
+		moveItemImage(itemId);
+		addItemToNoItemsFile(itemId);
+	}
+	
+	
+	public static void addItemToNoItemsFile(int itemId)
+	{
+	 
+		//If already is in file, don't add it again
+		try {
+			BufferedReader in = new BufferedReader(new FileReader(Paths.ITEMS_BLACK_LIST_FILE));
+		
+	    String str;
+	    while ((str = in.readLine()) != null) {
+	    	try
+	    	{
+	    		//Already in the file, do nothig
+	    		if(Integer.parseInt(str) == itemId)
+	    		{
+	    			 in.close();
+	    			 return;	    			
+	    		}
+	      
+	    	}catch(Exception ex){LOGGER.error("Error deleting "+str);}
+	    }
+	    in.close();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		//Not in the file, write it
+		try {
+			BufferedWriter out = new BufferedWriter(new FileWriter(Paths.ITEMS_BLACK_LIST_FILE));
+			out.write(itemId);
+			out.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+	}
+	
+	//Check if the item is in the black list
+	public static boolean isBlackListed(int iid)
+	{
+		DBConnection.transaction();
+		if(DBConnection.session().createSQLQuery("SELECT * FROM noitem WHERE item_id="+iid).list().size()!=0)return true;
+		return false;
+	}
+	
+	
+	public static List<Integer> getBlackListedItems()
+	{
+		DBConnection.transaction();
+		List<Object> objects = DBConnection.session().createSQLQuery("SELECT * FROM noitem").list();
+		List<Integer> items = new LinkedList<Integer>();
+		for(int i = 0;i<objects.size();i++)
+		{
+			int id = (Integer)objects.get(i);
+			if(!items.contains(id))items.add(id);	
+		}
+		return items;
+	}
+	
+
+	public static void main(String[] argv)
+	{		
+		try {
+		    BufferedReader in = new BufferedReader(new FileReader(Paths.ITEMS_BLACK_LIST_FILE));
+		    String str;
+		    String ids="";
+		    int i = 0;
+		    while ((str = in.readLine()) != null) {
+		    	try{
+		        ids+="("+str+"),";
+		        i++;
+		        if(i==10000)
+		        {
+		        	ids = ids.substring(0,ids.length()-1);
+				    DBConnection.session();
+				    DBConnection.transaction();
+				    DBConnection.session().createSQLQuery("INSERT INTO noitem (item_id) VALUES " +ids+" ").executeUpdate();
+				    DBConnection.transaction().commit();
+				    i=0;
+				    ids="";
+		        }
+		    	}catch(Exception ex){LOGGER.error("Error deleting "+str,ex); i=0;}
+		    }
+		    in.close();
+		    
+		    
+		} catch (IOException e) {
+		}
+		
+		
+		
+		//ItemRemover.removeItemFromFile(Paths.ITEMS_BLACK_LIST_FILE);		
+	}
+	
+
+
+}

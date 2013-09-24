@@ -1,0 +1,99 @@
+package rob.ors.informationGathering.CSVReader;
+
+import java.util.HashSet;
+import java.util.Set;
+import org.apache.log4j.Logger;
+
+import rob.ors.core.model.api.Category;
+import rob.ors.core.model.api.Garment;
+
+import rob.ors.core.model.impl.ConcreteGarmentI;
+
+import rob.ors.core.polyvore.PolyvoreCategoryTree;
+import rob.ors.core.utils.ImageReduction;
+
+
+/**
+ * Class for reading garments CSVs
+ * @author rsprat
+ *
+ */
+public class GarmentCSVReader extends CSVReader {
+	private static final Logger LOGGER = Logger.getLogger(GarmentCSVReader.class.getCanonicalName());
+	private Set<Integer> excludedReferences = new HashSet<Integer>(0);//List of iids of garments that are not garments 
+	private Set<Garment> garments;//List of read garments 
+	private Set<Integer> garmentsIds;
+	public Set<Integer> unCategorized;//List of garments without category
+	private int numGarments;
+
+	
+	public void excludeReferences(Set<Integer> references)
+	{
+		excludedReferences.addAll(references);		
+	}
+	
+	/**
+	 * Reads the CSV of garments and returns a list of garments.
+	 * The garments with iid in the excludedReferences list are not added to the result list.
+	 * The garments without a valid category are not added to the results list and its id is added to the uncategorized list
+	 * @param path
+	 * @return
+	 */
+	public Set<Garment> parseFile(String path)
+	{
+		unCategorized = new HashSet<Integer>();
+		numGarments=0;
+		garments = new HashSet<Garment>();
+		garmentsIds = new HashSet<Integer>();
+		System.out.println("Reading intems file: "+path);
+		LOGGER.debug("Reading intems file: "+path);
+		readFile(path);
+		
+		LOGGER.info("Total Num garments in file: "+numGarments);
+		LOGGER.info("Total garments got: "+garments.size());
+		LOGGER.info("Uncategorized: "+unCategorized.size());
+		
+		return garments;
+	}
+
+	/***
+	 * Process a line from the garments CSV file.
+	 * The shape of the line shall be iid,categoryId,days,#views,#saves,?,description
+	 * If the iid is inside the exludedReferences list, the line is skipped
+	 * If the categoryId is not valid, the iid is added to the list of uncategorized and the line is skipped 
+	 */
+	@Override
+	protected void process(String[] line) {
+		numGarments++;	
+		try{
+			Integer id = parseInteger(line[0]);	
+			LOGGER.debug("garment "+id);
+			Integer catId =  parseInteger(line[1]);
+			Integer days =  0;//parseInteger(line[2]);
+			Integer views =  0;//parseInteger(line[3]);
+			Integer saves = 0;// parseInteger(line[4]);		
+			String desc =  line[5];	
+			if(desc.length()>1999)desc = desc.substring(0,1999);
+			if(excludedReferences.contains(id)){LOGGER.info("not an garment"); return;	}
+
+			
+			Category cat = PolyvoreCategoryTree.getCategoryById(catId);
+			if(cat == null){LOGGER.debug("uncategorized, categoy is "+catId); unCategorized.add(id); return;}
+			if(garmentsIds.contains(id)){LOGGER.info("garment id already read"); return;}
+			else
+			{	
+				ConcreteGarmentI garment = new ConcreteGarmentI(id,cat);
+				garment.setSaves(saves);
+				garment.setViews(views);		
+				garment.setDescription(desc);
+				garments.add(garment);
+				garmentsIds.add(id);
+			}
+		
+		}catch(Exception e)
+		{		
+			e.printStackTrace();
+		}
+	}
+
+}

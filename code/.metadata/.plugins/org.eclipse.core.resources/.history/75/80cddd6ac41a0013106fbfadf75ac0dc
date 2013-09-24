@@ -1,0 +1,107 @@
+package rob.ors.garmentsclustering.similarityMatrix;
+
+import java.util.Arrays;
+import org.apache.log4j.Logger;
+
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+
+public class CompoundSimilarityFunction extends SimilarityFunction {
+	private static Logger LOGGER = Logger.getLogger(SimilarityFunction.class.getCanonicalName());
+	SimilarityFunction[] similarityFunctions;
+	double[] sfWeights;
+
+	public CompoundSimilarityFunction(SimilarityFunction[] similarityFunctions,double[] sfWeights) {
+		this.similarityFunctions = similarityFunctions;
+		this.sfWeights = sfWeights;
+	}
+	
+
+
+	private double getSimilarity(int functionIndex, int iid1,int iid2)
+	{
+		if (similarityFunctions[functionIndex] instanceof DescriptionSimilarityFunction)
+		{
+			return similarityFunctions[functionIndex].getSimilarity(iid1, iid2);
+		}
+		else
+		{		
+			IplImage i1image = images.get(iid1).clone();
+			CvMat i1mask = masks.get(iid1).clone();
+			IplImage i2image = images.get(iid2).clone();
+			CvMat i2mask = masks.get(iid2).clone();
+			double val = similarityFunctions[functionIndex].getSimilarity(i1image, i1mask, i2image, i2mask,iid1,iid2);	
+			i1image.release();
+			i1mask.release();
+			i2image.release();
+			i2mask.release();
+			return val;
+
+	
+		}
+	}
+
+	public double[] getSimilarityComponents(int iid1, int iid2) {
+		double[] val = new double[similarityFunctions.length];
+		for (int i = 0; i < similarityFunctions.length; i++) {
+			val[i] = getSimilarity(i,iid1, iid2);
+		}
+		return val;
+
+	}
+
+	public double[] getSimilarityComponents(int iid1,String description,
+			IplImage garmentImage, CvMat garmentMask) {
+		double[] val = new double[similarityFunctions.length];
+		for (int i = 0; i < similarityFunctions.length; i++) {
+			val[i] = getSimilarity(i,iid1, iid2);
+		}
+		return val;
+
+	}
+	
+	
+	public double[] getSimilarityComponents(int iid1, int iid2, int[] components) {
+		double[] val = new double[similarityFunctions.length];
+		Arrays.fill(val, -1);
+		for (int i : components) {
+			val[i] = getSimilarity(i,iid1, iid2);
+		}
+		return val;
+	}
+
+	public double getSimilarity(int iid1, int iid2) {
+		double[] sim = getSimilarityComponents(iid1, iid2);
+		double val = 0;
+		for (int i = 0; i < sfWeights.length; i++)
+			val += sim[i] * sfWeights[i];
+		return val;
+	}
+	
+	
+	@Override
+	public double getSimilarity(int iid1, String description,
+			IplImage garmentImage, CvMat garmentMask) {
+		double[] sim = getSimilarityComponents(iid1, description,garmentImage,garmentMask);
+		double val = 0;
+		for (int i = 0; i < sfWeights.length; i++)
+			val += sim[i] * sfWeights[i];
+		return val;
+		return 0;
+	}
+
+	@Override
+	public double getSimilarity(IplImage anGarmentImage, CvMat anGarmentMask,IplImage anotherGarmentImage, CvMat anotherGarmentMask,int iid1,int iid2) {
+		throw new RuntimeException();
+	}
+
+	@Override
+	public void matrixSliceChange() {
+		for (int i = 0; i < similarityFunctions.length; i++) {
+			similarityFunctions[i].matrixSliceChange();
+		}
+		
+	}
+
+
+}

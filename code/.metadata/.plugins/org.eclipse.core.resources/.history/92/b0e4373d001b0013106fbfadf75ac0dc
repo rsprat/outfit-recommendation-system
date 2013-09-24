@@ -1,0 +1,386 @@
+package rob.ors.graphicalTools;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import org.apache.log4j.Logger;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.SwingConstants;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.Category;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.polyvore.PolyvoreCategoryTree;
+import rob.ors.core.utils.GarmentRemover;
+
+public class OrderedGarmentsPanel extends JPanel implements ComponentListener, ChangeListener,ActionListener{
+	private static Logger LOGGER = Logger.getLogger(OrderedGarmentsPanel.class.getCanonicalName());
+
+	private JComboBox categoryComboBox;
+	Map<String,Integer> categoryMap;
+	protected List<Integer> garments;
+	protected List<Integer[]> tuples;
+	protected List<Integer[]> orderedTuples = new LinkedList<Integer[]>();
+	protected Map<Integer, ImageIcon> garmentImageMap;
+	protected JPanel concreteGarmentsPanel ;
+	protected JScrollPane scroller;
+	protected static Image blackImage;
+	protected int referencieGarmentId;
+	private static int garmentS_PER_ROW = 6;
+	private int garmentsCount;
+	static{
+		try {
+			
+			blackImage =  ImageIO.read(new File(Paths.BIG_IMAGES_FOLDER+"black.jpg"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	
+
+	private void initializeCategoryComboBox(){
+		DBConnection.transaction();
+		
+		categoryMap = new HashMap<String,Integer>();
+		for(Category cat : PolyvoreCategoryTree.getSubtreeAsOutfit(0))
+		{
+			String catName = "";
+			Category aux = cat;
+			while(aux!=PolyvoreCategoryTree.getCategoryTreeRoot())
+			{
+				catName = aux.getName()+">"+catName;
+				aux=aux.getParentCategory();
+			}
+			catName+="("+cat.getId()+")";
+			categoryMap.put(catName, cat.getId());
+		}
+
+		LinkedList cats = new LinkedList<String>(categoryMap.keySet());
+		Collections.sort(cats,new Comparator<String>() {
+
+			@Override
+			public int compare(String o1, String o2) {
+				return o1.compareTo(o2);
+
+			}
+		});
+		categoryComboBox = new JComboBox(cats.toArray());
+	}
+	
+	public OrderedGarmentsPanel(int garmentsCount)
+	{	
+		this.garmentsCount = garmentsCount;
+		initializeCategoryComboBox();
+		add(categoryComboBox);
+		categoryComboBox.setMaximumSize(new Dimension(500,30));
+		categoryComboBox.addActionListener(this);
+		concreteGarmentsPanel = new JPanel();
+		categoryChanged(-1);		
+		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+		
+		
+		int numGarments = garments.size();
+		int numRows;
+		int numCols;
+		if(numGarments<garmentS_PER_ROW)
+		{
+			numRows = numGarments;
+			numCols = garmentS_PER_ROW;
+			
+		}
+		else
+		{
+			numRows = numGarments/garmentS_PER_ROW;
+			numCols = garmentS_PER_ROW;
+			if(numGarments%garmentS_PER_ROW!=0)numRows+=1;
+		}
+		concreteGarmentsPanel.setLayout(new GridLayout(numRows,numCols));
+		scroller = new JScrollPane(concreteGarmentsPanel); 
+		scroller.getHorizontalScrollBar().setUnitIncrement(100);
+		scroller.getVerticalScrollBar().setUnitIncrement(100);
+		 
+		add(scroller);
+	}
+		
+	protected void loadGarmentsImages()
+	{		
+		garmentImageMap = new HashMap<Integer,ImageIcon>();
+		for(Integer garment: garments)
+		{		
+			BufferedImage garmentImage = loadImage(garment);
+			ImageIcon icon = new ImageIcon( garmentImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+			garmentImageMap.put(garment, icon);
+		}
+	}
+	
+
+	
+	
+	private void fillGarmentsPanel(List<Integer[]> garmentsTuples)
+	{
+		LOGGER.info("filling");
+		concreteGarmentsPanel.removeAll();
+		for(Integer[] garmentTuple : garmentsTuples)
+		{			
+
+			final int id = garmentTuple[0];
+			int distance = garmentTuple[1];
+			
+			JPanel comp = new JPanel();
+			comp.addMouseListener(new MouseListener() {
+				
+				@Override
+				public void mouseReleased(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mousePressed(MouseEvent arg0) {
+					referencieGarmentId = id;
+					changeReferenceGarment();					
+				}
+				
+				@Override
+				public void mouseExited(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mouseEntered(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+				
+				@Override
+				public void mouseClicked(MouseEvent arg0) {
+					// TODO Auto-generated method stub
+					
+				}
+			});
+			comp.setBorder(BorderFactory.createTitledBorder("garment: "+id));
+			
+
+			String label = ""+id;
+			//label+="\nnoise: "+garment.getAttributes().get(rob.ors.core.model.api.Attribute.NOISE.getId());
+			label+="\ns: "+distance;		
+			label+="\n"+getLabelAdditionalInfo(id);
+			JLabel imageLabel = new JLabel(convertToMultiline(label),garmentImageMap.get(id),SwingConstants.CENTER);
+			imageLabel.setFont(new Font("default", Font.PLAIN, 10));
+			comp.add(imageLabel);
+			JButton b = new JButton();
+			b.setSize(5, 5);
+			b.setBackground(Color.red);
+			b.addActionListener(new ActionListener() {
+				
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					GarmentRemover.removeGarment(id);					
+				}
+			});
+			comp.add(b);
+			
+			concreteGarmentsPanel.add(comp);
+		}
+	     revalidate();
+	     repaint();
+	     LOGGER.info("filled");
+		
+	}
+	
+	protected String getLabelAdditionalInfo(int garmentId)
+	{
+		return "";
+	}
+	
+	protected Integer getReferenceGarment()
+	{
+		
+		return referencieGarmentId;
+		
+	}
+	
+	public static String convertToMultiline(String orig)
+	{
+	    return "<html>" + orig.replaceAll("\n", "<br>");
+	}
+		
+	private List<Integer[]> orderTuples(List<Integer[]> unOrderedDistances)
+	{
+		if(unOrderedDistances==null) return new LinkedList<Integer[]>();
+		List<Integer[]> orderedDistances = new LinkedList<Integer[]>();
+		//orderedDistances.add(unOrderedDistances.remove(0));
+	
+	
+		while(unOrderedDistances.size()!=0)
+		{
+			Integer[] closestTuple = unOrderedDistances.get(0);
+			int maxSimilarity = unOrderedDistances.get(0)[1];
+			for(Integer[] garmentTuple : unOrderedDistances)
+			{
+				if( garmentTuple[1] > maxSimilarity)
+				{
+					maxSimilarity = garmentTuple[1];
+					closestTuple=garmentTuple;
+				}
+			}	
+			orderedDistances.add(closestTuple);
+			unOrderedDistances.remove(closestTuple);
+		}
+		
+			
+		return orderedDistances;
+	}
+	
+	protected void changeReferenceGarment(){GarmentRemover.removeGarment(referencieGarmentId);}
+	
+	protected BufferedImage loadImage(int garmentId)
+	{
+		BufferedImage myPicture = (BufferedImage) blackImage;
+    	try
+		{
+    	
+	    	myPicture = ImageIO.read(new File(Paths.BIG_IMAGES_FOLDER+garmentId+".jpg"));
+			
+		} catch (IOException e)
+		{
+		}
+    	
+    	return myPicture;
+	}
+
+	@Override
+	public void componentHidden(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void componentMoved(ComponentEvent e) {
+		// TODO Auto-generated method stubA
+		
+	}
+
+	@Override
+	public void componentResized(ComponentEvent e)
+	{
+		scroller.setPreferredSize(getSize());
+	    revalidate();
+	    repaint();
+	}
+
+	@Override
+	public void componentShown(ComponentEvent e) {
+		scroller.setPreferredSize(getSize());
+	    revalidate();
+	    repaint();		
+	}
+		
+	@Override
+	public void stateChanged(ChangeEvent arg0)
+	{
+	}
+	
+	protected void updateGarmentsPanel()
+	{
+		List<Integer[]> newOrder = orderTuples(tuples);
+		if(orderChanged( orderedTuples,newOrder))
+		{
+			LOGGER.info("order changed");
+			orderedTuples = newOrder;
+			fillGarmentsPanel(newOrder);
+		}
+		
+	}
+	
+	private boolean orderChanged(List<Integer[]> oldOrder, List<Integer[]> newOrder)
+	{
+		if(oldOrder.size()!=newOrder.size()) return true; //Sepecial case on startup
+		for(int i = 0; i<oldOrder.size();i++)
+		{
+			if(oldOrder.get(i)[0]!=newOrder.get(i)[0]) return true;
+		}
+		return false;
+	}
+	
+	@Override
+	public void actionPerformed(ActionEvent e)
+	{
+		JComboBox cb = (JComboBox)e.getSource();		
+		if(e.getSource().equals(categoryComboBox))
+		{
+			Integer categoryId = categoryMap.get(cb.getSelectedItem());
+			categoryChanged(categoryId);		
+		}
+	}
+	
+	protected List<Integer> selectGarments(int catId, int count)
+	{
+		if(count<0 || catId <0) return new LinkedList<Integer>();
+		Random r = new Random();
+		DBConnection.transaction();
+		List<Integer> allGarments = (List<Integer>) DBConnection.session().createSQLQuery("SELECT id from garments where category_id = "+catId).list();
+		LOGGER.info(""+allGarments.size());
+		List<Integer> aux = new LinkedList<Integer>(allGarments);
+		for(Integer garment:aux)
+		{
+			if(GarmentRemover.isBlackListed(garment))allGarments.remove(garment);
+		}
+		List<Integer> selectedGarments = new LinkedList<Integer>();
+		if(count==-1) return allGarments;
+		while(selectedGarments.size()<count)
+		{
+			Integer itm = allGarments.get(r.nextInt(allGarments.size()));
+			if(!selectedGarments.contains(itm))	selectedGarments.add(itm);
+		}
+		return selectedGarments;
+	}
+	
+	private void categoryChanged(int categoryId)
+	{
+		garments=selectGarments(categoryId, garmentsCount);
+		loadGarmentsImages();
+		if(garments.size()>0)referencieGarmentId = garments.get(0);
+		tuples = new LinkedList<Integer[]>();
+		garmentsChanged();
+		updateGarmentsPanel();
+	}
+	protected void garmentsChanged(){for(Integer garment:garments)tuples.add(new Integer[]{garment,0});fillGarmentsPanel(orderTuples(tuples));}
+
+
+
+	
+
+}
+

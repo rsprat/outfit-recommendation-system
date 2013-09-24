@@ -1,0 +1,362 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.BorderLayout;
+import java.awt.Button;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.LayoutManager;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.AbstractSet;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.model.impl.ConcreteItemI;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.FeaturesExtractor;
+import rob.crs.imgfeaturesextraction.ItemsComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import rob.crs.imgfeaturesextraction.imageProcessing.DirectoryReader;
+import rob.crs.informationGathering.clustering.MySpectralClusterer;
+import rob.crs.informationGathering.clustering.SimilarityFunction;
+import rob.crs.informationGathering.clustering.SimilarityMatrix;
+import weka.core.Attribute;
+
+public class ClustersPanel extends JPanel implements ComponentListener, ChangeListener,ActionListener{
+	private JComboBox categoryComboBox;
+	Map<String,Integer> categoryMap;
+	protected int[] items;
+	
+	
+	int categoryId=17;
+	JButton go;
+	private int numItems = 5;
+	JTextField numItemsField;
+	
+	private float alpha = 0.8f;
+	JTextField alphaField;
+	
+	
+	
+	protected SimilarityMatrix simMatrix;
+	protected JScrollPane scroller;
+	protected static Image blackImage;
+	private int itemsCount;
+	private SimilarityFunction similarityFunction;
+	static{
+		try {
+			blackImage =  ImageIO.read(new File("/home/robert/Desktop/smallImages/black.jpg"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	
+
+	private void initializeCategoryComboBox(){
+		DBConnection.transaction();
+		
+		categoryMap = new HashMap<String,Integer>();
+		for(Category cat : PolyvoreCategoryTree.getSubtreeAsSet(0))
+		{
+			String catName = "";
+			Category aux = cat;
+			while(aux!=PolyvoreCategoryTree.getCategoryTreeRoot())
+			{
+				catName = aux.getName()+">"+catName;
+				aux=aux.getParentCategory();
+			}
+			catName+="("+cat.getId()+")";
+			categoryMap.put(catName, cat.getId());
+		}
+
+		LinkedList cats = new LinkedList<String>(categoryMap.keySet());
+		Collections.sort(cats,new Comparator<String>() {
+
+			@Override
+			public int compare(String o1, String o2) {
+				return o1.compareTo(o2);
+
+			}
+		});
+		categoryComboBox = new JComboBox(cats.toArray());
+	}
+	
+	public ClustersPanel(SimilarityFunction similarityFunction)
+	{	
+		this.similarityFunction = similarityFunction;
+		
+		
+		add(new JLabel("Num items"));
+		numItemsField = new JTextField(new Integer(numItems).toString());
+		add(numItemsField);
+		
+		add(new JLabel("Alpha"));
+		alphaField = new JTextField(new Float(alpha).toString());
+		add(alphaField);		
+		
+		go = new JButton("Go");
+		add(go);
+		go.addActionListener(this);
+
+		
+		
+		initializeCategoryComboBox();
+		add(categoryComboBox);
+		categoryComboBox.setMaximumSize(new Dimension(500,30));
+		categoryComboBox.addActionListener(this);
+				
+		categoryChanged();		
+		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+	
+		
+		
+
+	}
+
+	private void fillClusterItemsPanels()
+	{
+
+
+		MySpectralClusterer clusterer = new MySpectralClusterer();
+		try {
+			clusterer.setAlphaStar(alpha);
+		} catch (Exception e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		try {
+			
+			if(simMatrix==null) simMatrix = clusterer.buildClusterer(items, similarityFunction);
+			else clusterer.buildClusterer(items, simMatrix);
+		} catch (Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		int n = 0;
+		try {
+			n = clusterer.numberOfClusters();
+		} catch (Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+		JPanel clustersPanel;
+		clustersPanel = new JPanel();
+		clustersPanel.setLayout(new GridLayout(1,n));
+		
+		
+		//Initialize the panels
+		List<JPanel> clusterItemsPanel = new LinkedList<JPanel>();
+		for(int i=0;i<n;i++)
+		{
+			JPanel panel = new JPanel();
+			panel.setLayout(new GridLayout(items.length,1));			
+			clusterItemsPanel.add(panel);	
+			clustersPanel.add(panel);
+		}
+		
+		for(int i = 0; i<items.length;i++)
+		{
+			int c = 0;
+			try {
+				c = clusterer.getTrainingInstanceCluster(items[i]);
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			JPanel comp = new JPanel();			
+			comp.setBorder(BorderFactory.createTitledBorder("Item: "+items[i]));		
+			String label = ""+items[i];			
+			BufferedImage itemImage = loadImage(items[i]);
+			ImageIcon icon = new ImageIcon( itemImage.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+			JLabel imageLabel = new JLabel(convertToMultiline(label),icon,SwingConstants.CENTER);
+			imageLabel.setFont(new Font("default", Font.PLAIN, 8));
+			comp.add(imageLabel);
+			clusterItemsPanel.get(c).add(comp);	
+			//clustersPanel.add(comp);	
+		}
+		
+		if(scroller!=null)remove(scroller);
+		scroller = new JScrollPane(clustersPanel);  
+		add(scroller);
+		
+		revalidate();
+		repaint();		
+	}
+
+	
+	public static String convertToMultiline(String orig)
+	{
+	    return "<html>" + orig.replaceAll("\n", "<br>");
+	}
+		
+	
+	private BufferedImage loadImage(int itemId)
+	{
+		BufferedImage myPicture = (BufferedImage) blackImage;
+    	try
+		{
+	    
+	    	myPicture = ImageIO.read(new File("/home/robert/Desktop/smallImages/"+itemId+".jpg"));
+			
+		} catch (IOException e)
+		{
+		}
+    	
+    	return myPicture;
+	}
+
+	@Override
+	public void componentHidden(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void componentMoved(ComponentEvent e) {
+		// TODO Auto-generated method stubA
+		
+	}
+
+	@Override
+	public void componentResized(ComponentEvent e)
+	{
+		scroller.setPreferredSize(getSize());
+	    revalidate();
+	    repaint();
+	}
+
+	@Override
+	public void componentShown(ComponentEvent e) {
+		scroller.setPreferredSize(getSize());
+	    revalidate();
+	    repaint();		
+	}
+		
+	@Override
+	public void stateChanged(ChangeEvent arg0)
+	{
+	}
+	
+	
+
+	@Override
+	public void actionPerformed(ActionEvent e)
+	{
+	
+		if(e.getSource().equals(categoryComboBox))
+		{
+			JComboBox cb = (JComboBox)e.getSource();	
+			categoryId = categoryMap.get(cb.getSelectedItem());
+			categoryChanged();		
+		}
+		if(e.getSource().equals(go))
+		{
+			int newNumItems = Integer.parseInt(numItemsField.getText());
+			alpha = Float.parseFloat(alphaField.getText());	
+			if(newNumItems!=numItems)
+			{
+				numItems = newNumItems;
+				simMatrix = null;
+				items=Arrays.copyOf(selectItems(categoryId),numItems);
+	
+			}
+			fillClusterItemsPanels();			
+		    revalidate();
+		    repaint();	
+			
+		}
+		
+		
+	}
+	
+	private static int[] selectItems(int catId)
+	{
+		List<String> images = DirectoryReader.getFileNames(ConfigReader.getAttribute("smallImagesFolder"), "jpg");		
+		List<Integer> itemsWithImage = new LinkedList<Integer>();
+
+		for(String id: images)
+		{
+			id = id.replace(".jpg", "");
+			id = id.replace(".jpeg", "");
+			if(!id.equals("black"))itemsWithImage.add(new Integer(id));
+		
+		}				
+		DBConnection.transaction();
+		
+		List<ConcreteItem> allItems = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI where category_id = "+catId).list();
+		System.out.println(allItems.size());
+		List<Integer> selectedItems = new LinkedList<Integer>();
+		for(ConcreteItem item:allItems)
+		{
+			if(itemsWithImage.contains(item.getId())) selectedItems.add(item.getId());
+				
+		}
+		
+		int []slected = new int[selectedItems.size()];
+		for(int i = 0; i<selectedItems.size(); i++) slected[i] = selectedItems.get(i);
+		return slected;
+	}
+	
+	private void categoryChanged()
+	{
+		items=Arrays.copyOf(selectItems(categoryId),numItems);
+		simMatrix = null;
+		fillClusterItemsPanels();
+	    revalidate();
+	    repaint();		
+	}
+
+
+
+	
+
+}
+

@@ -1,0 +1,431 @@
+package rob.crs.informationGathering.clustering;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.management.RuntimeErrorException;
+import javax.swing.JFrame;
+import javax.swing.plaf.metal.MetalIconFactory.FolderIcon16;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+import org.math.plot.Plot3DPanel;
+import org.math.plot.plots.Plot;
+import org.math.plot.plots.ScatterPlot;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.AbstractSet;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.model.impl.AbstractItemI;
+import rob.crs.core.model.impl.AbstractSetI;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import weka.clusterers.ClusterEvaluation;
+import weka.clusterers.Clusterer;
+import weka.clusterers.SimpleKMeans;
+import weka.clusterers.SpectralClusterer;
+import weka.clusterers.XMeans;
+import weka.core.Attribute;
+import weka.core.DistanceFunction;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+import weka.core.converters.FileSourcedConverter;
+import weka.core.neighboursearch.PerformanceStats;
+import weka.core.neighboursearch.kdtrees.KMeansInpiredMethod;
+import weka.gui.explorer.ClustererPanel;
+import weka.gui.explorer.VisualizePanel;
+import weka.gui.visualize.PlotData2D;
+
+public class Cluster {
+	//http://ccia.ei.uvigo.es/docencia/MRA/practicas0809/api-weka.html#SECTION00060000000000000000
+	//http://stats.stackexchange.com/questions/19506/does-weka-have-an-online-api
+	//file:///opt/weka/doc/index.html
+	
+	//http://ianma.wordpress.com/2010/01/16/weka-with-java-eclipse-getting-started/
+	
+	private static void visualize(Clusterer clusterer, Instances data)
+	{
+		  // setup visualization
+	    // taken from: ClustererPanel.startClusterer()
+		  ClusterEvaluation eval = new ClusterEvaluation();
+		    eval.setClusterer(clusterer);
+		    try {
+				eval.evaluateClusterer(data);
+			} catch (Exception e2) {
+				// TODO Auto-generated catch block
+				e2.printStackTrace();
+			}
+		PlotData2D predData = null;
+		try {
+			predData = ClustererPanel.setUpVisualizableInstances(data, eval);
+		} catch (Exception e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+	    String name = (new SimpleDateFormat("HH:mm:ss - ")).format(new Date());
+	    String cname = clusterer.getClass().getName();
+	    if (cname.startsWith("weka.clusterers."))
+	      name += cname.substring("weka.clusterers.".length());
+	    else
+	      name += cname;
+	 
+	    weka.gui.visualize.VisualizePanel vp = new  weka.gui.visualize.VisualizePanel();
+	
+	    vp.setName(name + " (" + data.relationName() + ")");
+	    //predData.setPlotName(name + " (" + train.relationName() + ")");
+	    try {
+			vp.addPlot(predData);
+		} catch (Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+	 
+	    // display data
+	    // taken from: ClustererPanel.visualizeClusterAssignments(VisualizePanel)
+	    String plotName = vp.getName();
+	    final javax.swing.JFrame jf = 
+	      new javax.swing.JFrame("Weka Clusterer Visualize: " + plotName);
+	    jf.setSize(500,400);
+	    jf.getContentPane().setLayout(new BorderLayout());
+	    jf.getContentPane().add(vp, BorderLayout.CENTER);
+	    jf.addWindowListener(new java.awt.event.WindowAdapter() {
+	      public void windowClosing(java.awt.event.WindowEvent e) {
+	        jf.dispose();
+	      }
+	    });
+	    jf.setVisible(true);
+	  }
+
+	private static void addColorScatterPlot(Clusterer clusterer, Instances data, int cluster, Color color, Plot3DPanel plot)
+	{
+		double[] r = new double[(int) data.numInstances()];
+		double[] g = new double[(int) data.numInstances()];
+		double[] b = new double[(int) data.numInstances()];
+		int i = 0;
+		Enumeration en = data.enumerateInstances();
+		while(en.hasMoreElements())
+		{
+			try {
+			Instance instance = (Instance) en.nextElement();
+			if(clusterer.clusterInstance(instance) == cluster)
+			{
+			
+				CvScalar itemColor = CvMatUtils.intToBGR((int) instance.value(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId()-1));
+				r[i]=(int) itemColor.getVal(0);
+				g[i]=(int) itemColor.getVal(1);
+				b[i]=(int) itemColor.getVal(2);
+				i++;
+				
+				
+			}
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		plot.addScatterPlot("Cluster "+cluster, color, r, g, b);
+		
+		
+		
+	}
+	
+	private static void visualizeClusterColors(Clusterer clusterer, Instances data)
+	{
+		
+		// create your PlotPanel (you can use it as a JPanel) with a legend at SOUTH
+		Plot3DPanel plot = new Plot3DPanel("SOUTH");
+ 
+		Color[] colors = {Color.black,Color.blue, Color.cyan, Color.gray, Color.green, Color.magenta, Color.pink, Color.ORANGE, Color.red, Color.yellow, Color.lightGray};
+		
+		try {
+			for(int i=0; i<clusterer.numberOfClusters(); i++)
+			{
+				addColorScatterPlot(clusterer,data,i,colors[i],plot);
+			}
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		// put the PlotPanel in a JFrame like a JPanel
+		JFrame frame = new JFrame("a plot panel");
+		frame.setSize(600, 600);
+		frame.setContentPane(plot);
+		frame.setVisible(true);
+		
+	}
+	
+	private static void clusterImages(Clusterer clusterer,Set<Item> items)
+	{
+		
+		String clustersFolder = "/home/robert/Desktop/test_images/clusters/";
+		String imgPath = "/home/robert/Desktop/images/";
+		int numClusters = 0;
+		try {numClusters = clusterer.numberOfClusters();		} catch (Exception e) {	e.printStackTrace();}
+				
+		for(int i =0; i<numClusters; i++)
+		{
+			File clusterFolder = new File(clustersFolder+"cluster"+i);
+			clusterFolder.mkdir();
+			for(String fileName : clusterFolder.list()) new File(clusterFolder.getAbsolutePath()+"fileName").delete();//delete all files within the folder			
+			
+		}
+		
+		
+		for(Item item:items)
+		{
+			try {
+			int cluster = clusterer.clusterInstance(ModelInstanceConverter.toInstance(item) );
+			Process p = Runtime.getRuntime().exec("cp "+imgPath+item.getId()+".jpg "+clustersFolder+"cluster"+cluster+"/"); //TODO not portable
+			p.waitFor();
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		
+	}
+	
+	public static void cluster(Category category, boolean updateDB)
+	{
+		FastVector fvWekaAttributes = new FastVector( ModelInstanceConverter.ATTRIBUTES.keySet().size());
+		for(Integer attributeId : ModelInstanceConverter.ATTRIBUTES.keySet())
+		{
+			fvWekaAttributes.addElement(ModelInstanceConverter.ATTRIBUTES.get(attributeId));
+		}
+		 
+		DBConnection.transaction();
+		
+		List<ConcreteItem> items = DBConnection.session().createQuery("from ConcreteItemI where category_id="+category.getId()).list();		 
+		
+		List<Instance> itemInstances = ModelInstanceConverter.toInstance(items);
+		
+		Instances instances = new Instances("items",fvWekaAttributes,items.size());
+		for(Instance instance: itemInstances) instances.add(instance);
+
+	
+		SimpleKMeans kmeans = new SimpleKMeans();			
+		try
+		{
+			kmeans.setPreserveInstancesOrder(true);
+			kmeans.setNumClusters(12);
+		
+			kmeans.setDontReplaceMissingValues(false);		
+			kmeans.getDistanceFunction().setAttributeIndices(""+(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId()));
+			//kmeans.setDistanceFunction( new MyDistanceFunction());
+			System.out.println(kmeans.numberOfClusters());
+			kmeans.buildClusterer(instances);
+			System.out.println(kmeans.numberOfClusters());
+			//visualizeClusterColors(kmeans,instances);
+			//visualize(kmeans,instances);
+			//clusterImages(kmeans,new HashSet<Item>(items));
+			updateDB(kmeans,items);
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+		} 
+		
+		
+		
+	}
+	
+	private static void updateDB(SimpleKMeans clusterer,List<ConcreteItem> items)
+	{
+		DBConnection.transaction();
+		
+		Category category = items.get(0).getCategory();
+		
+		/*Set the item abstraction of the concrete items as dummy item to avoid fk violation when deleting abstract items*/
+		Category dummyCategory =  (Category) DBConnection.session().createQuery("from CategoryI WHERE id = 99999").list().get(0);	
+		AbstractItem dummy = new AbstractItemI(dummyCategory);
+		DBConnection.session().save(dummy);
+		
+		Set<AbstractItem> abstractItems = new HashSet<AbstractItem>();
+		
+		for(ConcreteItem citem: category.getItems())
+		{
+			if(citem.getAbstractItem()!=null)
+				{
+				abstractItems.add(citem.getAbstractItem());
+				citem.setAbstractitem(dummy);
+				DBConnection.session().update(citem);
+				}
+
+		}
+	
+		category.getAbstractItems().removeAll(abstractItems);
+		DBConnection.session().update(category);
+
+		for(AbstractItem abstractItem : abstractItems)
+		{
+			for(AbstractSet abstractSet: abstractItem.getSets())
+			{
+				/*Break the relation between the concrete sets and the abstract set*/
+				for(ConcreteSet concreteSet : abstractSet.getSets())
+				{
+					concreteSet.setAbstractset(null); 
+					DBConnection.session().update(concreteSet);
+				}
+				DBConnection.session().delete(abstractSet); //Delete the abstract set
+			}
+		
+			System.out.println("abstract item sets"+abstractItem.getItems());
+			abstractItem.getCategory().getAbstractItems().remove(abstractItem);
+			DBConnection.session().delete(abstractItem);
+		}
+		
+
+		
+		
+		//Create the abstract item that represents each cluster centroid and add the concrete items it generalizes
+		for(int c = 1; c<clusterer.getNumClusters(); c++)
+		{
+			AbstractItem abstractItem = ModelInstanceConverter.toModel(category, clusterer.getClusterCentroids().instance(c)); //Create a new abstract item from the cluster centroid
+			//DBConnection.session().update(abstractItem);
+			
+			assignConcreteItemsToAbstractItem(clusterer, c,items,abstractItem); //Update concrete items abstract items
+		}	
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		
+		dummy.getCategory().getAbstractItems().clear();
+		for(AbstractSet s: dummy.getSets())	s.getItems().remove(dummy);
+		for(ConcreteItem i: dummy.getItems())if(i.getAbstractItem().equals(dummy)) throw new RuntimeException("item "+i.getId()+" has dummy as abstraction");
+		DBConnection.session().delete(dummy);
+
+	}
+	
+	
+	/**
+	 * Assign the concrete items from a certain cluster to the abstract item that represent the cluster centroid
+	 * @param clusterer
+	 * @param clusterIndex
+	 * @param items
+	 * @param abstractItem
+	 */
+	private static void assignConcreteItemsToAbstractItem(SimpleKMeans clusterer, int clusterIndex, List<ConcreteItem> items, AbstractItem abstractItem)
+	{
+		try {
+			for(int i= 0; i<items.size();i++)
+			{				
+				if(clusterer.getAssignments()[i]==clusterIndex) // The item belongs to the cluster
+				{
+					//System.out.println(abstractItem.getId());
+					items.get(i).setAbstractitem(abstractItem);
+					DBConnection.session().saveOrUpdate(items.get(i));
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void createAbstractSets(List<ConcreteItem> items)
+	{
+		//Find the concrete sets with items belonging to the cluster
+		Set<ConcreteSet> affectedSets = new HashSet<ConcreteSet>();
+		for(ConcreteItem item:items)
+		{
+			affectedSets.addAll(item.getSets());
+		}
+		System.out.println("Affected sets "+affectedSets.size());
+		List<AbstractSet> abstractSets = new LinkedList<AbstractSet>();
+		//For each afected set, search the abstract set to which it belongs or create it and add itself to the list
+		for(ConcreteSet affectedSet : affectedSets)
+		{
+			AbstractSet abstractSet = getSuitableAbstractSet(affectedSet,abstractSets);
+			if(abstractSet!=null)
+			{
+				abstractSets.add(abstractSet);
+				DBConnection.session().update(affectedSet);
+			}
+		}
+		DBConnection.transaction().commit();
+	}
+	
+	/**
+	* Get the abstract set that represents the given concrete set.
+	 * If the abstract set is found on the abstractSetCluster map, updates its likes & views and returns it.
+	 * If not, creates it.
+	 * @param set
+	 * @param abstractSetCluster
+	 * @return
+	 */
+	public static AbstractSet getSuitableAbstractSet(ConcreteSet set,List<AbstractSet> abstractSets )
+	{
+		//Get the items that the set abstraction should have
+		Set<AbstractItem> abstractItems = new HashSet<AbstractItem>();
+		for(ConcreteItem item: set.getItems())
+			{
+				if(item.getAbstractItem() == null) return null;//Abstract item is null, so we can't create an abstract set
+				abstractItems.add(item.getAbstractItem()); 
+			}
+		
+		//Search the list of abstract set for an abstract set with this items
+		for(AbstractSet abstractSet : abstractSets)
+		{
+			//If found, no need to create a new abstract set, add the concrete set to the list of concrete sets of the abstract set
+			if(abstractSet.getItems().equals(abstractItems))
+			{
+				abstractSet.addSet(set);
+				System.out.println("Equakity");
+				return abstractSet;
+			}						
+		}
+		
+		//If not found, create an abstract set with the items and add it to the list
+		AbstractSet abstraction = new AbstractSetI();
+		for(AbstractItem item: abstractItems) abstraction.addItem(item);//Use the addItem method to propagate to the item
+		abstraction.addSet(set);
+		DBConnection.session().save(abstraction);
+		return abstraction;
+	}
+	
+	public static void main(String[] args)	
+	{
+		DBConnection.transaction();
+	
+		createAbstractSets(DBConnection.session().createQuery("from ConcreteItemI").list());
+		//createAbstractSets(DBConnection.session().createQuery("from ConcreteItemI").list());
+		
+	}
+	
+	public void clusterAllItems()
+	{
+
+		for(Category auxCat : PolyvoreCategoryTree.getSubtreeAsSet(0))
+		{
+			List<Category> result = DBConnection.session().createQuery("from CategoryI where id="+auxCat.getId()).list();
+			System.out.println("Category "+auxCat.getName());
+			if(result.size()!=0)
+			{
+				Category cat = (Category) result.get(0);
+				cluster(cat, true);
+			}
+			else System.out.println("Category "+auxCat.getName()+" "+auxCat.getId()+" not in db");
+
+		}
+	}
+
+}

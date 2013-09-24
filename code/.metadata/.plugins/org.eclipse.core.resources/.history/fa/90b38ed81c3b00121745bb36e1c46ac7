@@ -1,0 +1,201 @@
+package rob.crs.imgfeaturesextraction.imageProcessing;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Random;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.imgfeaturesextraction.ImagePrinter;
+
+import com.googlecode.javacv.cpp.opencv_core.*;
+
+import com.googlecode.javacv.JavaCvErrorCallback;
+import com.googlecode.javacv.cpp.opencv_core.*;
+import com.googlecode.javacv.cpp.opencv_imgproc.*;
+import com.googlecode.javacv.cpp.opencv_imgproc;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.*;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+import com.googlecode.javacv.*;
+import com.googlecode.javacv.cpp.*;
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_legacy.*;
+// SRC: http://www.activovision.com/octavi/doku.php?id=javacv_opencv_7-1_hs_histogram
+// SRC https://groups.google.com/forum/?fromgroups=#!topic/javacv/7v_rf9vfuEI
+public class HistogramExtractor {
+	
+	
+	private static CvHistogram getHSHistogram(int itm, IplImage src, CvMat mask )
+	{
+		IplImage hsv = cvCreateImage(cvGetSize(src), 8, 3);
+		cvCvtColor(src, hsv, CV_BGR2HSV);
+		            
+		IplImage h_plane = cvCreateImage(cvGetSize(src), 8, 1);
+		IplImage s_plane = cvCreateImage(cvGetSize(src), 8, 1);
+		IplImage v_plane = cvCreateImage(cvGetSize(src), 8, 1);
+		cvSplit(src, h_plane, s_plane, v_plane, null); //cvCvtPixToPlane
+		
+
+//		ImagePrinter p = new ImagePrinter(h_plane);		
+//		p.print("/home/robert/Desktop/basura/"+itm+"_h.png");
+		
+//		p = new ImagePrinter(s_plane);		
+//		p.print("/home/robert/Desktop/basura/"+itm+"_s.png");
+//		
+//		p = new ImagePrinter(v_plane);		
+//		p.print("/home/robert/Desktop/basura/"+itm+"_v.png");
+//		
+		
+		int hist_size[] = {30,32};
+		float h_ranges[] = {0, 180};
+		float s_ranges[] = {0, 255};
+		float[][] ranges = {h_ranges,s_ranges};	 	      
+		
+		CvHistogram hist = cvCreateHist(2, hist_size, CV_HIST_ARRAY, ranges,1);
+		cvCalcHist(new IplImage[]{h_plane,s_plane}, hist, 0, mask);	   
+		//cvNormalizeHist( hist, 1.0f );
+		cvReleaseImage(h_plane);
+		cvReleaseImage(s_plane);
+		cvReleaseImage(v_plane);
+		return hist;		
+	}
+	
+	private static void drawHistogram(int iid, int r,int c,CvHistogram hist )
+	{
+		
+	     // Output image size 
+        int width = 800; 
+        int height = 800; 
+
+        int numBins = 30;
+        Float[] values = new Float[numBins];
+        for (int bin=0;bin<numBins;bin++)values[bin]=cvQueryHistValue_1D(hist, bin);
+ 
+        // Set highest point to 90% of the number of bins 
+
+   
+        
+       //double scale = height * 0.9 / Collections.max(Arrays.asList(values)); 
+       double scale = ((float)height)/20000;
+       
+       // Create a color image to draw on 
+       BufferedImage canvas = new BufferedImage(width, height,BufferedImage.TYPE_INT_RGB); 
+       Graphics2D g = canvas.createGraphics(); 
+
+       // Paint background 
+       g.setPaint(Color.WHITE); 
+       g.fillRect(0, 0, width, height); 
+
+       // Draw a vertical line for each bin 
+       g.setPaint(Color.BLUE); 
+
+       System.out.println("itm "+iid+": ");
+       for (int bin=0;bin<numBins;bin++)
+       { 
+    	 
+           int h = (int )Math.round(cvQueryHistValue_1D(hist, bin) * scale); 	
+           System.out.print(cvQueryHistValue_1D(hist, bin)+" ");
+	        g.fillRect(bin*(width/numBins), height- h, width/numBins, height  );
+       } 
+       System.out.println(" ");
+       ByteArrayOutputStream oStream = new ByteArrayOutputStream();
+       try {
+			javax.imageio.ImageIO.write(canvas, "png", oStream);
+			 FileOutputStream outputStream = new FileOutputStream(new File("/home/robert/Desktop/basura/"+iid+"_"+r+"c.png"));
+			 oStream.writeTo(outputStream);
+			 oStream.close();
+			 outputStream.close();
+
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+      
+       // Cleanup 
+       g.dispose(); 
+	}
+	
+	public static CvHistogram[][] getHSPatchHistogram(int iid, IplImage src, float relativePatchSize)
+	{
+		if(relativePatchSize<=0) relativePatchSize = 0.1f;
+		if(relativePatchSize>1)relativePatchSize = 1f;
+		CvMat itemMask = BackgroundExtractor.colorMask(CvMatUtils.getCvMatFromIplImage(src), CV_RGB(255,255,255), 10);
+		
+		int numCols = (int) (1/relativePatchSize);
+		int numRows = numCols;
+		
+		
+		int pixelsPerCol = (int)(src.width()*relativePatchSize);
+		int pixelsPerRow = (int)(src.height()*relativePatchSize);
+		
+		CvHistogram[][] histograms = new CvHistogram[numRows][numCols];
+		for(int r=0; r<numRows; r++)
+		{
+			int startY = pixelsPerRow*r;
+			int endY;
+			if(r==numRows-1) endY = src.height();
+			else endY = (pixelsPerRow-1)*(r+1);
+			
+			
+			for(int c=0; c<numCols; c++)
+			{
+				int startX = pixelsPerCol*c;
+				int endX;
+				if(c==numCols-1) endX = src.width();
+				else endX = (pixelsPerCol-1)*(c+1);
+			
+				CvMat patchMask = CvMat.create(itemMask.rows(),itemMask.cols(),CV_8U);
+				cvSet(patchMask,CV_RGB(0,0,0));
+				for(int y=startY; y<endY;y++)
+				{
+					for(int x=startX; x<endX; x++) patchMask.put(y, x, itemMask.get(y,x));
+					
+				}			
+				IplImage image = new IplImage();	
+				//ImagePrinter p = new ImagePrinter(cvGetImage(patchMask, image));
+				//ImagePrinter p = new ImagePrinter(cvGetImage(src, image));				
+				//p.print("/home/robert/Desktop/basura/"+iid+"m_"+r+"_"+c+".png");
+
+				
+				histograms[r][c]  = getHSHistogram(iid,src,patchMask);	
+				//drawHistogram(iid,r,c,histograms[r][c]);
+				//Save the mask
+				//IplImage image = new IplImage();	
+				//ImagePrinter p = new ImagePrinter(cvGetImage(patchMask, image));
+				//p.print(destFolder+"m_"+r+"_"+c+".png");
+			}
+		}
+		return histograms;
+	}
+	
+		
+	public static void main(String[] args) {
+		String IMAGES_SRC_PATH = ConfigReader.getAttribute("smallImagesFolder");
+
+		IplImage anItemImageAux = cvLoadImage("/home/robert/Desktop/test_images/"+32986271+".jpg");
+	    	CvHistogram [][] firstItemHistMatrix = getHSPatchHistogram(40672,anItemImageAux,1f);
+//	    	CvHistogram [][] secondItemHistMatrix = getHSPatchHistogram(32986271,0.3f);
+//	    	double accumulated = 0;
+//	    	for(int i = 0; i<firstItemHistMatrix.length; i++)
+//	    	{
+//	    		for(int j=0;j<firstItemHistMatrix[i].length;j++)
+//	    		{
+//	    			double val = cvCompareHist(firstItemHistMatrix[i][j], secondItemHistMatrix[i][j], CV_COMP_CORREL);
+//	    			accumulated+=val;
+//	    			System.out.println("["+i+"]["+j+"]= "+val);
+//	    		}
+//	    	}	
+//	    	System.out.println("mean:"+accumulated/(firstItemHistMatrix.length*firstItemHistMatrix[0].length));
+//
+    }
+
+
+}

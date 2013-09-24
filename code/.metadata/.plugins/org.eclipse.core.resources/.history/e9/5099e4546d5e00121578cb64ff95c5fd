@@ -1,0 +1,15 @@
+package rob.crs.imgfeaturesextraction;
+
+import rob.crs.core.config.ConfigReader;
+
+public class FeaturesExtractor {
+	
+	private static final String IMAGES_SRC_PATH = ConfigReader.getAttribute("bigImagesFolder");
+	private static final String IMAGES_DST_PATH = ConfigReader.getAttribute("processedImagesFolder");
+	
+
+
+	
+   
+       
+}

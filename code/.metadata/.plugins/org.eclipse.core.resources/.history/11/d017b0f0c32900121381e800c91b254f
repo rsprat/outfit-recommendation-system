@@ -1,0 +1,238 @@
+package rob.crs.imgfeaturesextraction;
+
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.imgfeaturesextraction.imageProcessing.BackgroundExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import rob.crs.imgfeaturesextraction.imageProcessing.NoiseDetection;
+import rob.crs.imgfeaturesextraction.itemProportionsExtractor.ItemProportionsExtractor;
+
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+
+/**
+ * Compar
+ * @author robert
+ *
+ */
+public class ItemsComparator {
+	private static final String IMAGES_SRC_PATH = ConfigReader.getAttribute("smallImagesFolder");
+	private static final String IMAGES_DST_PATH = ConfigReader.getAttribute("processedImagesFolder");
+	
+	public static int similarity(int anItem, int anotherItem,float sigma)
+	{
+		
+		IplImage anItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anItem+".jpg");
+		IplImage anotherItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anotherItem+".jpg");
+		if(anItemImageAux == null || anotherItemImageAux == null)return 0;
+		CvMat anItemImage = CvMatUtils.getCvMatFromIplImage(anItemImageAux);
+		CvMat anotherItemImage = CvMatUtils.getCvMatFromIplImage(anotherItemImageAux);
+
+			
+		CvMat anItemMask = BackgroundExtractor.colorMask(anItemImage,CV_RGB(255,255,255),10);
+		CvMat anotherItemMask = BackgroundExtractor.colorMask(anotherItemImage,CV_RGB(255,255,255),10);	
+		
+		int difference = widthsSimilarity( anItemMask, anotherItemMask,sigma);
+		//int difference = maskSimilarityCompute( anItemMask, anotherItemMask);
+		cvReleaseImage(anItemImageAux);
+		cvReleaseImage(anotherItemImageAux);		
+		
+		//CvMat maskDifference = CvMat.create(anItemMask.rows(),anItemMask.cols()); 
+		//int difference = maskSimilarity( anItemMask, anotherItemMask,maskDifference);
+		//new ImagePrinter(new IplImage(maskDifference)).print(IMAGES_DST_PATH+"dif_"+anItem+"_"+anotherItem+".jpg");
+	
+		return difference;
+	}
+	public static int maskSimilarityCompute(CvMat anItemMask,CvMat anotherItemMask)
+	{
+		if(anItemMask.rows()!=anotherItemMask.rows()) System.out.println("rows not equal");
+		if(anItemMask.cols()!=anotherItemMask.cols()) System.out.println("rows not equal");
+		float equalCount = 0;
+		for(int y=0; y<anItemMask.rows(); y++)
+		{
+		    for(int x=0; x<anItemMask.cols(); x++)
+		    {		    
+		  //System.out.println(CvMatUtils.getMono(anItemMask, y, x)+" "+CvMatUtils.getMono(anotherItemMask, y, x));
+		    	if(CvMatUtils.getMono(anItemMask, y, x) == 255 && CvMatUtils.getMono(anotherItemMask, y, x) == 255)equalCount++;
+		    }
+		}
+		return (int) ((equalCount/(float)(anotherItemMask.cols()*anotherItemMask.rows()))*100);
+	}
+
+	
+	
+	public static int widthsSimilarity(CvMat anItemMask,CvMat anotherItemMask,float sigma)
+	{	
+		ItemProportionsExtractor extr = new ItemProportionsExtractor() {
+			
+			@Override
+			public void printProportions(ImagePrinter printer, CvMat mask) {
+				// TODO Auto-generated method stub
+				
+			}
+			
+			@Override
+			public Map<Integer, Integer> getProportions(CvMat mask) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public Set<Category> getAplicableCategories() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+		};
+		int anItemTop = extr.getTop(anItemMask);
+		int anItemHeight = extr.getBottom(anItemMask)-anItemTop;
+		
+		int anotherItemTop = extr.getTop(anotherItemMask);
+		int anotherItemHeight = extr.getBottom(anotherItemMask)-anotherItemTop;
+		//float similarity = 0;
+		float similarity = 100;
+		for(int i = 0; i<100; i++)
+		{
+			float anItemWidthAtPoint = extr.getWidthAtHeigth(anItemMask, i, anItemTop, anItemHeight, 1);
+			float anotherItemWidthAtPoint = extr.getWidthAtHeigth(anotherItemMask, i, anotherItemTop, anotherItemHeight, 1);
+			//similarity+= Math.exp(-Math.pow(Math.abs(anItemWidthAtPoint-anotherItemWidthAtPoint),2)/2*Math.pow(sigma,2));
+			float dif = Math.abs(anItemWidthAtPoint-anotherItemWidthAtPoint)/anItemMask.cols();
+			similarity-=dif*dif;
+		}
+		return (int) Math.max(0,similarity);
+	}
+	
+	
+	public static int maskSimilarity(CvMat anItemMask,CvMat anotherItemMask,CvMat maskDifference)
+	{
+		cvSet(maskDifference,CV_RGB(255,255,255));
+		
+		if(anItemMask.rows()!=anotherItemMask.rows()) System.out.println("rows not equal");
+		if(anItemMask.cols()!=anotherItemMask.cols()) System.out.println("rows not equal");
+		float equalCount = 0;
+		for(int y=0; y<anItemMask.rows(); y++)
+		{
+		    for(int x=0; x<anItemMask.cols(); x++)
+		    {		    
+		  //System.out.println(CvMatUtils.getMono(anItemMask, y, x)+" "+CvMatUtils.getMono(anotherItemMask, y, x));
+		    	if(CvMatUtils.getMono(anItemMask, y, x) == CvMatUtils.getMono(anotherItemMask, y, x))
+		    		{
+		    		maskDifference.put(y, x,0);
+		    		equalCount++;
+		    		}
+		    }
+		}
+		return (int) ((equalCount/(float)(anotherItemMask.cols()*anotherItemMask.rows()))*100);
+	}
+	
+	/*
+	 * Compute the similarity between two images comparing each RGB pixel value and returning the count of diferent pixels.
+	 * Two pixels are different if the distance between each RGB component is more than threshold.
+	 * Returns the percentage of different pixels
+	 */
+	public static int pixelColorSimilarity(int anItem, int anotherItem,int threshold)
+	{
+		
+		IplImage anItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anItem+".jpg");
+		IplImage anotherItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anotherItem+".jpg");
+		if(anItemImageAux == null || anotherItemImageAux == null)return 0;
+		CvMat anItemImage = CvMatUtils.getCvMatFromIplImage(anItemImageAux);
+		CvMat anotherItemImage = CvMatUtils.getCvMatFromIplImage(anotherItemImageAux);
+		float equalCount = 0;
+		for(int y=0; y<anItemImage.rows(); y++)
+		{
+		    for(int x=0; x<anItemImage.cols(); x++)
+		    {		    
+		    	if(ColorComparator.similar(CvMatUtils.get(anItemImage, y, x), CvMatUtils.get(anotherItemImage, y, x), threshold))
+	    		{
+		    		equalCount++;
+	    		}
+		    }
+		}
+		int dif =  (int) ((equalCount/(float)(anItemImage.cols()*anItemImage.rows()))*1000);
+		cvReleaseImage(anItemImageAux);
+		cvReleaseImage(anotherItemImageAux);
+		return dif;
+	}
+	
+	
+	
+	
+	
+	
+	private static CvScalar patchMeanColor(CvMat image, int x0 , int y0 ,int x1,int y1)
+	{
+		int numPixels = (x1-x0)*(y1-y0);
+		CvScalar meanColor = new CvScalar(image.channels());
+		//Initialize the color
+		for(int i=0;i<image.channels();i++)
+		{
+			meanColor.setVal(i, 0);
+		}
+		
+		
+		for(int y=y0; y<y1;y++)//For each pixel of the patch
+		{
+			for(int x=x0;x<x1;x++)
+			{
+				CvScalar pixelColor = CvMatUtils.get(image, y, x);
+				for(int i=0;i<image.channels();i++)
+				{
+					meanColor.setVal(i, meanColor.getVal(i)+pixelColor.getVal(i)/numPixels); //summ to the mean color the pixel color/numPixels
+				}
+				
+			}
+		}
+		return meanColor;
+	}
+	
+
+	
+	public static float patchDistance(int anItem, int anotherItem,int patchSize)
+	{
+
+		
+		IplImage anItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anItem+".jpg");
+		IplImage anotherItemImageAux = cvLoadImage(IMAGES_SRC_PATH+anotherItem+".jpg");		
+		if(anItemImageAux == null || anotherItemImageAux == null)return 0;
+		CvMat anItemImage = CvMatUtils.getCvMatFromIplImage(anItemImageAux);
+		CvMat anotherItemImage = CvMatUtils.getCvMatFromIplImage(anotherItemImageAux);
+		
+		
+		float distance = 0;
+		for(int y=0; y<anItemImage.rows(); y+=patchSize)
+		{
+		    for(int x=0; x<anItemImage.cols(); x+=patchSize)
+		    {	
+		    	int x1 = Math.min(x+patchSize,anItemImage.cols());
+		    	int y1 = Math.min(y+patchSize,anItemImage.rows());
+	    		CvScalar anItemPatchColor = patchMeanColor(anItemImage,x,y,x1,y1);
+	    		CvScalar anotherItemPatchColor = patchMeanColor(anotherItemImage,x,y,x1,y1);
+	    		distance+=CvMatUtils.euclidianDistance(anItemPatchColor,anotherItemPatchColor);	    		
+		    }
+		}
+	
+		//TODO: Gestionar quan la mida de la imatge no es divisible per patchSize
+		cvReleaseImage(anItemImageAux);
+		cvReleaseImage(anotherItemImageAux);
+		return distance;
+	}
+	
+	
+	
+	
+	
+	
+}

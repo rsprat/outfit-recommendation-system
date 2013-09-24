@@ -1,0 +1,315 @@
+package rob.crs.informationGathering.clustering;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+
+import org.python.modules.gc;
+
+import com.googlecode.javacv.cpp.opencv_core.Algorithm.Constructor;
+
+import rob.crs.core.config.ConfigReader;
+
+import cern.colt.matrix.DoubleFactory2D;
+import cern.colt.matrix.DoubleFactory3D;
+import cern.colt.matrix.DoubleMatrix2D;
+import cern.colt.matrix.DoubleMatrix3D;
+
+public class CompoundSimilarityMatrix
+{
+	private DoubleMatrix3D similarityMatrix; //N*N matrix with the similarity between the pairs of the N items
+	private HashMap<Integer,Integer> itemIDRowNumber; //Store the maping between the items id and the id they have in the similarityMatrix
+	private HashMap<Integer,Integer> rowNumberItemId; 
+	private CompoundSimilarityFunctionBuilder similarityFunctionBuilder;
+
+	
+	public CompoundSimilarityMatrix(int[] itemsIds, final CompoundSimilarityFunctionBuilder similarityFunctionBuilder)
+	{	
+	
+		this.similarityFunctionBuilder = similarityFunctionBuilder;
+		itemIDRowNumber = new HashMap<Integer,Integer>(itemsIds.length);
+		rowNumberItemId = new HashMap<Integer,Integer>(itemsIds.length);
+		final Set<Integer> filteredItemsIds = new HashSet<Integer>();
+		for(int i=0; i<itemsIds.length; i++)
+		{	
+			if(filteredItemsIds.add(itemsIds[i])) //If the id wasn't in the set
+			{
+				Integer rowNumber = new Integer(filteredItemsIds.size()-1);
+				Integer itemId = new Integer(itemsIds[i]);
+				itemIDRowNumber.put(itemId,rowNumber); //Add the maping between the index in the matrix and the item id
+				rowNumberItemId.put(rowNumber,itemId);
+			}
+		}
+		
+		similarityMatrix = DoubleFactory3D.dense.make(similarityFunctionBuilder.getSimilarityFunctionBuilders().size(),filteredItemsIds.size(),filteredItemsIds.size());
+		
+		
+		//Fill the similarity matrix with the similarity values
+		int[] indexes = new int[similarityFunctionBuilder.getSimilarityFunctionBuilders().size()];
+		for(int i=0;i<similarityFunctionBuilder.getSimilarityFunctionBuilders().size();i++)indexes[i]=i;
+		computeSimilarityMatrixComponents(indexes);		
+	}
+	
+	public void removeItem(int iid)
+	{	
+		//Remove the item from the mappings itemId-rowNumber and rowNumber-itemId
+		int itemRowNumber = itemIDRowNumber.get(iid);	
+		HashMap<Integer,Integer> newItemIDRowNumber = new HashMap<Integer,Integer>(itemIDRowNumber.size()-1);
+		HashMap<Integer,Integer> newRowNumberItemId = new HashMap<Integer,Integer>(itemIDRowNumber.size()-1);
+		
+		/**
+		 * Make an exact copy of both maps until the index of the row is the same as the item being deleted.
+		 * This item is not added and, the following items will have i-1 as index where i was their indeix in the old maps
+		 * In other words, remove the item from the maps keeping the indexes consecutive.
+		 */
+		{
+			int i=0;
+			for(int k=0;k<itemIDRowNumber.size();k++)
+			{
+				if(k!=itemRowNumber)
+				{
+					newItemIDRowNumber.put(rowNumberItemId.get(k), i);
+					newRowNumberItemId.put(i, rowNumberItemId.get(k));
+					i++;
+				}
+			}
+		}
+
+		
+		DoubleMatrix3D tmp = similarityMatrix.copy();
+		similarityMatrix = DoubleFactory3D.dense.make(similarityFunctionBuilder.getSimilarityFunctionBuilders().size(),similarityMatrix.rows()-1,similarityMatrix.columns()-1);
+		for(int iid1:newItemIDRowNumber.keySet())
+		{
+			for(int iid2:newItemIDRowNumber.keySet())
+			{
+				for(int k=0;k<similarityMatrix.slices();k++)
+				{
+					double val = tmp.get(k, itemIDRowNumber.get(iid1), itemIDRowNumber.get(iid2));
+					similarityMatrix.set(k, newItemIDRowNumber.get(iid1), newItemIDRowNumber.get(iid2), val);
+					
+				}
+				
+			}
+			
+		}
+		//replace the old mappings with the new ones
+		itemIDRowNumber = newItemIDRowNumber;
+		rowNumberItemId = newRowNumberItemId;
+	}
+	
+	public CompoundSimilarityFunctionBuilder getSimilarityFunctionBuilder()
+	{
+		return similarityFunctionBuilder;
+	}
+	
+	/**
+	 * Recompute parts of the similarity matrix 
+	 * @param slices an array containing the index of the matrix components to be updated.
+	 * If the matrix has 3 components (3 slices) corresponding to 3 different distance functions, a valid parameter is any subset of [0,1,2]
+	 */
+	public void computeSimilarityMatrixComponents(final int[] slices)
+	{
+	
+		System.out.println("Computing similarityMatrix slices: "+Arrays.toString(slices));
+		class ComputeSimilarity implements Runnable
+		{
+			int workerId;			
+			int numWorkers;
+			CompoundSimilarityFunction similarityFunction;
+			
+			public ComputeSimilarity(int workerId, int numWorkers, CompoundSimilarityFunction similarityFunction)
+			{				
+				this.similarityFunction = similarityFunction;
+				this.workerId=workerId;
+				this.numWorkers=numWorkers;
+			}
+			@Override
+			public void run() {
+				int i = workerId;
+				int count = 0;
+				while(i<rowNumberItemId.keySet().size())
+				{
+					for(int j=i;j<rowNumberItemId.size();j++)
+					{			
+						double sim[] = similarityFunction.getSimilarityComponents(rowNumberItemId.get(i), rowNumberItemId.get(j),slices);
+						for(int s:slices)
+						{
+							similarityMatrix.set(s,i, j,sim[s]);
+							similarityMatrix.set(s,j, i,sim[s]);	
+							if(++count%200==0) System.gc();
+						}
+					}
+					i+=numWorkers;
+				}
+				
+			}
+			
+		}
+				
+		//Creates and starts all threads
+		int numThreads = 4;
+		Thread[] threads = new Thread[numThreads];
+	
+		
+		for(int i=0; i<numThreads;i++)
+		{
+			threads[i] = new Thread(new ComputeSimilarity(i, numThreads,(CompoundSimilarityFunction)similarityFunctionBuilder.build()));
+			threads[i].start();
+		}
+		
+		//Wait for all the threads
+		for(int i=0; i<numThreads;i++)
+		{
+			try {
+				threads[i].join();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		//System.out.println(similarityMatrix);
+
+		try {
+			writeToFile(ConfigReader.getAttribute("outputPath")+"sim.txt");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	public double getSimilarity(int anItemId, int anotherItemId)
+	{
+		int x = getRowNumber(anItemId);
+		int y = getRowNumber(anotherItemId);
+		double val = 0;
+		for(int s=0;s<similarityMatrix.slices();s++) val+=(similarityMatrix.get(s, x, y)*similarityFunctionBuilder.getSimilarityFunctionWeights()[s]);
+		return val;
+	}
+	
+	public double[] getSimilarityComponents(int anItemId, int anotherItemId)
+	{
+		int x = getRowNumber(anItemId);
+		int y = getRowNumber(anotherItemId);
+		double[] val = new double[similarityMatrix.slices()];
+		for(int s=0;s<similarityMatrix.slices();s++) val[s]=similarityMatrix.get(s, x, y);
+		return val;
+	}
+	public int getItemId(int index)
+	{
+		return rowNumberItemId.get(index);
+	}
+	
+	public int getRowNumber(int itemId)
+	{
+		return itemIDRowNumber.get(itemId);
+	}
+	
+	public DoubleMatrix2D getSimilarityMatrix()
+	{
+		DoubleMatrix2D jointMatrix = DoubleFactory2D.dense.make(similarityMatrix.rows(), similarityMatrix.columns());
+		for(int i = 0; i<similarityMatrix.rows();i++)
+		{
+			for(int j=0; j<similarityMatrix.columns(); j++)
+			{
+				double val = 0;
+				for(int s=0;s<similarityMatrix.slices();s++) val+=similarityMatrix.get(s, i, j)*similarityFunctionBuilder.getSimilarityFunctionWeights()[s];
+				jointMatrix.set(i, j, val);
+				jointMatrix.set(j, i, val);
+			}
+		}
+		return jointMatrix;
+	}
+	
+	public SimilarityFunction getSimilarityFunction()
+	{
+		return similarityFunctionBuilder.build();
+	}
+
+	public void writeToFile(String path) throws IOException
+	{
+		FileWriter fw = new FileWriter(path);
+		BufferedWriter writer = new BufferedWriter(fw);
+		writer.write(new Date().toGMTString()+"\n");
+		writer.write("#SimFunctions:"+similarityMatrix.slices()+"\n");
+		for(Integer rowNumber : rowNumberItemId.keySet())
+		{
+			writer.write(rowNumber+","+rowNumberItemId.get(rowNumber)+"\n");
+		}
+		
+		for(int s=0;s<similarityMatrix.slices();s++)
+		{
+			writer.write("######"+similarityFunctionBuilder.getSimilarityFunctionBuilders().get(s).getClass().getName()+"\n");			
+			for(int j = 0; j<rowNumberItemId.size();j++)
+			{
+				for(int i=0; i<=j;i++)
+				{									
+					writer.write(similarityMatrix.get(s,j, i)+",");
+				}
+				writer.write("\n");
+			}
+			
+		}
+
+		writer.close();
+		fw.close();
+
+		
+	}
+	
+	
+	
+	
+	public void readFile(String file) throws IOException
+	{
+		FileReader inputStream = new FileReader(file);
+		BufferedReader reader = new BufferedReader(inputStream);
+
+		itemIDRowNumber = new HashMap<Integer,Integer>();
+		rowNumberItemId = new HashMap<Integer,Integer>();
+		String line;
+		line = reader.readLine();//Skip timestamp line
+		line = reader.readLine();
+
+		int slices = Integer.parseInt(line.split(":")[1]);//Get the number of slices of the matrix (the number of similarity functions)
+		while(!(line = reader.readLine()).contains("######"))
+		{
+			String[] vals = line.split(",");
+			Integer itemId = new Integer(vals[1]);
+			Integer rowId = new Integer(vals[0]);
+			itemIDRowNumber.put(itemId, rowId);
+			rowNumberItemId.put(rowId, itemId);			
+		}
+		similarityMatrix = DoubleFactory3D.dense.make(slices,itemIDRowNumber.size(),itemIDRowNumber.size());
+		for(int s =0; s<slices;s++)
+		{
+			for(int i=0;i<itemIDRowNumber.size();i++)
+			{
+				line = reader.readLine();
+				String[] vals = line.split(",");
+				for(int j=0; j<vals.length-1;j++) similarityMatrix.set(s,i, j, new Double(vals[j]));
+			}	
+			reader.readLine();
+		}
+
+		reader.close();
+		inputStream.close();
+	}
+	
+
+
+	
+	
+
+}

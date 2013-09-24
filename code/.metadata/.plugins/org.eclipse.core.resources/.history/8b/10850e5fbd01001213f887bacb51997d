@@ -1,0 +1,132 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.GroupLayout.Alignment;
+import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+
+class ConcreteSetPanel extends JPanel implements ComponentListener
+{
+	private ConcreteSet set;
+	private static Image blackImage;
+	private Map<JLabel,BufferedImage> imagesMap = new HashMap<JLabel,BufferedImage>();
+	static{
+		try {
+			blackImage =  ImageIO.read(new File("/home/robert/Desktop/images/black.jpg"));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public ConcreteSetPanel(ConcreteSet set) 
+	{
+		
+		super(new GridLayout(1, set.getItems().size()));
+		setBackground(Color.lightGray);
+	    setBorder(BorderFactory.createTitledBorder("Set: "+set.getId()));
+	    
+	    int imageH =150;
+	    
+	    List<ConcreteItem> items = new LinkedList<ConcreteItem>(set.getItems());
+	    
+	    Collections.sort(items,new Comparator<ConcreteItem>(){
+
+			@Override
+			public int compare(ConcreteItem arg0, ConcreteItem arg1) {
+				return arg0.getCategory().getId()- arg1.getCategory().getId();
+			}
+	    	
+	    });
+	    
+	    
+	    for(ConcreteItem item : items)
+	    {
+	    	
+	    	BufferedImage itemImage = loadImage(item);
+			ImageIcon icon = new ImageIcon( itemImage.getScaledInstance(-1, imageH,  java.awt.Image.SCALE_SMOOTH) );
+			JLabel imageLabel = new JLabel("tttt"+item.getId(),icon,SwingConstants.CENTER);
+			imagesMap.put(imageLabel, itemImage);
+			add(imageLabel);
+	    }
+	    setPreferredSize(new Dimension((imageH+10)*set.getItems().size(),imageH+60));
+	    //setMaximumSize(new Dimension((imageH+10)*set.getItems().size(),imageH+60));
+	}
+	
+	public BufferedImage loadImage(ConcreteItem item)
+	{
+		BufferedImage myPicture = (BufferedImage) blackImage;
+    	try
+		{
+	    	if(item!=null)
+	    	{
+	    		myPicture = ImageIO.read(new File("/home/robert/Desktop/images/"+item.getId()+".jpg"));
+			}
+		} catch (IOException e)
+		{
+		}
+    	
+    	return myPicture;
+	}
+
+	@Override
+	public void componentHidden(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void componentMoved(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void componentResized(ComponentEvent e) {
+
+		for(Component c: getComponents())
+		{
+			if(c.getClass().equals(JLabel.class))
+			{
+				
+				JLabel label = (JLabel)c;
+				label.setIcon(new ImageIcon(imagesMap.get(label).getScaledInstance(-1, (int)(getHeight()*0.8), java.awt.Image.SCALE_SMOOTH)));
+				
+				
+			}
+		}
+		//setPreferredSize(getSize());
+	    revalidate();
+	    repaint();
+		
+	}
+
+	@Override
+	public void componentShown(ComponentEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+}

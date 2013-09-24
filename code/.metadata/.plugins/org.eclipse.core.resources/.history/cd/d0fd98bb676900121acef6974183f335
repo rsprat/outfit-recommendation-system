@@ -1,0 +1,149 @@
+package rob.crs.informationGathering.visualitzation;
+
+import static com.googlecode.javacv.cpp.opencv_core.cvReleaseImage;
+import static com.googlecode.javacv.cpp.opencv_highgui.cvLoadImage;
+import static com.googlecode.javacv.cpp.opencv_highgui.cvShowImage;
+import static com.googlecode.javacv.cpp.opencv_highgui.cvWaitKey;
+
+import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.informationGathering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.crs.informationGathering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.crs.informationGathering.similarityMatrix.HistogramSimilarityFunction;
+import rob.crs.informationGathering.similarityMatrix.SimilarityFunction;
+import rob.crs.informationGathering.similarityMatrix.SimilarityFunctionBuilder;
+import rob.crs.informationGathering.similarityMatrix.WidthSimilarityFunction;
+
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+public class View {
+	private static OrderedItemsPanel itemsPanel;
+		
+	    public static void test(String filename) {
+	        IplImage image = cvLoadImage(filename);
+	        if (image != null) {
+	            cvShowImage("Window 1",image);
+	            cvWaitKey(0);
+	            cvReleaseImage(image);
+	        }
+	    }
+	 
+	    
+	private static ClustersPanel getClustersPanel()
+	{
+		CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new HistogramSimilarityFunction();
+				
+			}
+			
+		}, 0.5f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build(){
+				return new WidthSimilarityFunction();
+				
+			}
+			
+		}, 0.5f);
+
+		
+		CompoundSimilarityMatrix mat = new CompoundSimilarityMatrix(new int[0], fb);
+		try {
+			mat.readFile("E:\\MyDocuments\\get-dressed\\dades\\output\\sim_243.txt");
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		return new ClustersPanel(fb,mat);
+		
+	}
+	
+	public static void main(String[] args)	
+	{		
+
+		final JFrame frame = new JFrame("Abstract sets");
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+				
+		frame.add(getClustersPanel());
+		//frame.add(new SuspiciousItemsPanel());
+		//frame.add(new WHCompareItemsPanel(10));
+		//AbstractSetsViewer v = new AbstractSetsViewer();
+		//frame.addComponentListener(v);
+		//frame.add(new WidthCompareItemsPanel(100));
+		
+		//frame.add(new PixelCompItemsPanel(selectItems(15,200)));
+		//frame.add(new Comp3ItemsPanel(100));
+		JButton refresh = new JButton("refresh");
+		refresh.setMargin(new Insets(0,0,0,0));  
+		refresh.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if(itemsPanel!=null)panel.remove(itemsPanel);
+			//	itemsPanel = new Comp3ItemsPanel(selectItems(20));
+				//panel.add(itemsPanel);
+				panel.revalidate();
+				panel.repaint();
+				
+			}
+		});
+	
+		
+		panel.add(refresh);
+		//frame.add(v);
+		
+	
+		
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+	
+	}
+	
+	private static List<ConcreteItem> selectItems(int catId, int count)
+	{
+		Random r = new Random();
+		DBConnection.transaction();
+		List<ConcreteItem> allItems = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI where category_id = "+catId).list();
+		System.out.println(allItems.size());
+		List<ConcreteItem> selectedItems = new LinkedList<ConcreteItem>();
+		while(selectedItems.size()<count)
+		{
+			ConcreteItem itm = allItems.get(r.nextInt(allItems.size()));
+			if(!selectedItems.contains(itm))	selectedItems.add(itm);
+		}
+		//for(ConcreteItem item: selectedItems)	System.out.println(FeaturesExtractor.getAttributes(item.getId(), PolyvoreCategoryTree.getCategoryById(item.getCategory().getId()), true));
+		
+		return selectedItems;
+	}
+}

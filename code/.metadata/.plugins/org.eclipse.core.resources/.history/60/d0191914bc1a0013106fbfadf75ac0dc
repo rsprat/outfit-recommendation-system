@@ -1,0 +1,109 @@
+package rob.ors.informationGathering.getters;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Date;
+import java.util.List;
+import org.apache.log4j.Logger;
+
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.ConcreteGarment;
+import rob.ors.core.model.api.ConcreteOutfit;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.api.Garment;
+import rob.ors.core.model.impl.ConcreteOutfitI;
+
+
+public class OutfitGetter extends Getter{
+	private static final Logger LOGGER = Logger.getLogger(OutfitGetter.class.getCanonicalName());
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.SetGetter#queryWebForOutfit(java.lang.Integer)
+	 */
+
+	public static String queryWebForOutfit(Integer sid)
+	{
+		LOGGER.info("Quering web for outfit ");
+		try 
+		{ 
+			Process p=Runtime.getRuntime().exec("python  "+Paths.PYTHON_SCRIPTS_PATH+"getOutfit.py "+sid); 
+		
+			BufferedReader reader=new BufferedReader(new InputStreamReader(p.getInputStream()));
+			p.waitFor(); 
+			String setData = null; 
+			String newLine="";
+			
+			while((newLine=reader.readLine())!=null) 
+			{ 
+				if(newLine.startsWith("SETDATA:")) setData = newLine.substring("SETDATA:".length());
+			} 
+			reader.close();
+			return setData;
+			
+		} 
+		catch(IOException e1) {e1.printStackTrace();} 
+		catch(InterruptedException e2) {e2.printStackTrace();} 
+		return null;
+	}
+	
+	
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.SetGetter#getOutfit(java.lang.Integer, boolean, int)
+	 */
+
+	public static ConcreteOutfit getOutfit(Integer sid, boolean update, int deepness)
+	{
+		if(sid==null) return null;
+		LOGGER.info("Getting outfit "+sid);
+		List<ConcreteOutfit> dboutfits = DBConnection.session().createQuery("from ConcreteOutfitI WHERE id="+sid).list();
+		ConcreteOutfit outfit = null;
+		if(dboutfits.size()!=0) outfit = dboutfits.get(0);
+		
+		//If the outfit doesn't exists in the DB or its olther than the max age, get it form the web
+		if(outfit==null || (outfit.isOlder(MAX_AGE) && update))
+		{
+			String setData = queryWebForOutfit(sid);	
+			if(setData == null ) return null;
+			outfit = readOutfitCSV(setData,outfit,update,deepness);
+			if(outfit!=null)outfit.setDate(new Date());
+		}
+		return outfit;
+	}
+	
+	
+	/* (non-Javadoc)
+	 * @see rob.ors.core.informationGathering.getters.impl.SetGetter#readOutfitCSV(java.lang.String, rob.ors.core.model.api.ConcreteOutfit, boolean, int)
+	 */
+
+	public static ConcreteOutfit readOutfitCSV(String line, ConcreteOutfit outfit, boolean update, int deepness)
+	{
+		String[] setData = line.split(";");
+		if(outfit == null)
+		{
+			outfit = new ConcreteOutfitI(integer(setData[0]),null);
+		}
+		
+		outfit.setAge(integer(setData[1]));
+		outfit.setViews(integer(setData[2]));
+		outfit.setLikes(integer(setData[3]));
+		
+		for(String garmentId : setData[4].split(","))
+		{
+			LOGGER.info("Add garment "+garmentId);
+			Garment garment = GarmentGetter.getGarment(integer(garmentId), update,deepness-1);
+		
+			DBConnection.session();
+		
+			if(garment != null){
+				outfit.addGarment((ConcreteGarment) garment);
+				((ConcreteGarment) garment).getOutfits().add(null);	}
+					
+		}
+		
+		DBConnection.session().saveOrUpdate(outfit);
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		return outfit;
+	}
+}

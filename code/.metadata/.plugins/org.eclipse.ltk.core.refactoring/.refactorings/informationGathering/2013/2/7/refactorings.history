@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename type &apos;descProcess.Attributemap&apos; to &apos;AttributeMap&apos;&#x0D;&#x0A;- Original project: &apos;informationGathering&apos;&#x0D;&#x0A;- Original element: &apos;descProcess.Attributemap&apos;&#x0D;&#x0A;- Renamed element: &apos;descProcess.AttributeMap&apos;&#x0D;&#x0A;- Update references to refactored element&#x0D;&#x0A;- Update textual occurrences in comments and strings" description="Rename type &apos;Attributemap&apos;" flags="589830" id="org.eclipse.jdt.ui.rename.type" input="/src&lt;descProcess{Attributemap.java[Attributemap" matchStrategy="1" name="AttributeMap" qualified="false" references="true" similarDeclarations="false" stamp="1361101310028" textual="false" version="1.0"/>
+</session>

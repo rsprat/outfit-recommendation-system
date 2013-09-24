@@ -1,0 +1,176 @@
+package rob.crs.informationGathering.clustering;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.management.RuntimeErrorException;
+import javax.swing.JFrame;
+import javax.swing.plaf.metal.MetalIconFactory.FolderIcon16;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+import org.math.plot.Plot3DPanel;
+import org.math.plot.plots.Plot;
+import org.math.plot.plots.ScatterPlot;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.AbstractSet;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.model.impl.AbstractItemI;
+import rob.crs.core.model.impl.AbstractSetI;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import weka.clusterers.ClusterEvaluation;
+import weka.clusterers.Clusterer;
+import weka.clusterers.SimpleKMeans;
+import weka.clusterers.SpectralClusterer;
+import weka.clusterers.XMeans;
+import weka.core.Attribute;
+import weka.core.DistanceFunction;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+import weka.core.converters.FileSourcedConverter;
+import weka.core.neighboursearch.PerformanceStats;
+import weka.core.neighboursearch.kdtrees.KMeansInpiredMethod;
+import weka.gui.explorer.ClustererPanel;
+import weka.gui.explorer.VisualizePanel;
+import weka.gui.visualize.PlotData2D;
+
+public class ClusterSpectral extends Cluster {
+	
+	public static void cluster(Category category, boolean updateDB)
+	{
+		FastVector fvWekaAttributes = new FastVector( ModelInstanceConverter.ATTRIBUTES.keySet().size());
+		for(Integer attributeId : ModelInstanceConverter.ATTRIBUTES.keySet())
+		{
+			fvWekaAttributes.addElement(ModelInstanceConverter.ATTRIBUTES.get(attributeId));
+		}
+		 
+		DBConnection.transaction();
+		
+		List<ConcreteItem> items = DBConnection.session().createQuery("from ConcreteItemI where category_id="+category.getId()).list();		 
+		
+		List<Instance> itemInstances = ModelInstanceConverter.toInstance(items);
+		
+		Instances instances = new Instances("items",fvWekaAttributes,items.size());
+		for(Instance instance: itemInstances) instances.add(instance);
+
+		SpectralClusterer spectral = new SpectralClusterer();
+		try
+		{
+			spectral.setDistanceFunction(new MyDistanceFunction(items));
+			spectral.buildClusterer(instances);
+			System.out.println(spectral.numberOfClusters());			
+			updateDB(spectral,items);
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+		} 
+
+		
+	}
+	
+	private static void updateDB(SpectralClusterer clusterer,List<ConcreteItem> items)
+	{
+		DBConnection.transaction();
+		
+		Category category = items.get(0).getCategory();
+
+		//Create the abstract item that represents each cluster centroid and add the concrete items it generalizes
+		for(int c = 1; c<clusterer.numberOfClusters(); c++)
+		{
+			AbstractItem abstractItem = new AbstractItemI(items.get(0).getCategory());						
+			assignConcreteItemsToAbstractItem(clusterer, c,items,abstractItem); //Update concrete items abstract items
+			DBConnection.session().save(abstractItem);
+		}	
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+	
+	}
+	
+	
+	/**
+	 * Assign the concrete items from a certain cluster to the abstract item that represent the cluster centroid
+	 * @param clusterer
+	 * @param clusterIndex
+	 * @param items
+	 * @param abstractItem
+	 */
+	private static void assignConcreteItemsToAbstractItem(SpectralClusterer clusterer, int clusterIndex, List<ConcreteItem> items, AbstractItem abstractItem)
+	{
+		try {
+			for(int i= 0; i<items.size();i++)
+			{				
+				if(clusterer.clusterInstance(ModelInstanceConverter.toInstance(items.get(i)))==clusterIndex) // The item belongs to the cluster
+				{					
+					abstractItem.addItem(items.get(i));
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	
+	public static void main(String[] args)	
+	{
+		DBConnection.transaction();
+		clusterAllItems();
+		//createAbstractSets();
+	}
+	
+	public static void clusterAllItems()
+	{
+
+		clearAbstractionDB();
+		
+		Category auxCat = new LinkedList<Category>(PolyvoreCategoryTree.getSubtreeAsSet(0)).get(0);
+		{
+			List<Category> result = DBConnection.session().createQuery("from CategoryI where id="+auxCat.getId()).list();
+			System.out.println("Category "+auxCat.getName());
+			if(result.size()!=0)
+			{
+				Category cat = (Category) result.get(0);
+				cluster(cat, true);
+			}
+			else System.out.println("Category "+auxCat.getName()+" "+auxCat.getId()+" not in db");
+
+		}
+		
+		
+		for(Category auxCat : PolyvoreCategoryTree.getSubtreeAsSet(0))
+		{
+			List<Category> result = DBConnection.session().createQuery("from CategoryI where id="+auxCat.getId()).list();
+			System.out.println("Category "+auxCat.getName());
+			if(result.size()!=0)
+			{
+				Category cat = (Category) result.get(0);
+				cluster(cat, true);
+			}
+			else System.out.println("Category "+auxCat.getName()+" "+auxCat.getId()+" not in db");
+
+		}
+	}
+
+}

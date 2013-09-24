@@ -1,0 +1,120 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+
+import org.python.core.NewCompilerResources;
+
+import rob.crs.core.config.ConfigReader;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.model.impl.ConcreteItemI;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.FeaturesExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.DirectoryReader;
+
+public class View {
+	private static ItemsPanel itemsPanel;
+	public static void main(String[] args)	
+	{		
+		final JFrame frame = new JFrame("Abstract sets");
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+		//AbstractSetsViewer v = new AbstractSetsViewer();
+		//frame.addComponentListener(v);
+		//frame.add(new PatchCompareItemsPanel(100));
+		//frame.add(new PixelCompItemsPanel(selectItems(15,200)));
+		frame.add(new Comp3ItemsPanel(100))
+		JButton refresh = new JButton("refresh");
+		refresh.setMargin(new Insets(0,0,0,0));  
+		refresh.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if(itemsPanel!=null)panel.remove(itemsPanel);
+				itemsPanel = new Comp3ItemsPanel(selectItems(20));
+				panel.add(itemsPanel);
+				panel.revalidate();
+				panel.repaint();
+				
+			}
+		});
+	
+		
+		panel.add(refresh);
+		//frame.add(v);
+		
+	
+		
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setVisible(true);
+	
+	}
+	
+	private static List<ConcreteItem> selectItems(int catId, int count)
+	{
+		Random r = new Random();
+		DBConnection.transaction();
+		List<ConcreteItem> allItems = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI where category_id = "+catId).list();
+		System.out.println(allItems.size());
+		List<ConcreteItem> selectedItems = new LinkedList<ConcreteItem>();
+		while(selectedItems.size()<count)
+		{
+			ConcreteItem itm = allItems.get(r.nextInt(allItems.size()));
+			if(!selectedItems.contains(itm))	selectedItems.add(itm);
+		}
+		//for(ConcreteItem item: selectedItems)	System.out.println(FeaturesExtractor.getAttributes(item.getId(), PolyvoreCategoryTree.getCategoryById(item.getCategory().getId()), true));
+		
+		return selectedItems;
+	}
+	
+	//Not from the DB, just image in folder
+	private static List<ConcreteItem> selectItems2(int count)
+	{
+		
+		List<String> images = DirectoryReader.getFileNames(ConfigReader.getAttribute("smallImagesFolder"), "jpg",count);
+		List<ConcreteItem> selectedItems = new LinkedList<ConcreteItem>();
+		for(String id: images)
+		{
+			id = id.replace(".jpg", "");
+			id = id.replace(".jpeg", "");
+			selectedItems.add(new ConcreteItemI(new Integer(id), new CategoryI(1,"")));
+		}
+		
+		return selectedItems;
+	}
+	
+	private static List<ConcreteItem> selectItems(int count)
+	{
+		DBConnection.transaction();
+		List<String> images = DirectoryReader.getFileNames(ConfigReader.getAttribute("smallImagesFolder"), "jpg",count);
+		List<ConcreteItem> selectedItems = new LinkedList<ConcreteItem>();
+		for(String id: images)
+		{
+			id = id.replace(".jpg", "");
+			id = id.replace(".jpeg", "");
+			List<ConcreteItem> aux = (List<ConcreteItem>) DBConnection.session().createQuery("from ConcreteItemI where id = "+id).list();
+			if(aux.size()!=0)selectedItems.add(aux.get(0));
+		}
+		
+		return selectedItems;
+	}
+}

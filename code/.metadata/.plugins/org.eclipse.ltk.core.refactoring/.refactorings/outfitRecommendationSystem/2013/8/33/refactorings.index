@@ -1,0 +1,91 @@
+1376295498930	Delete element
+1376297029449	Delete elements
+1376306347234	Rename type 'ItemsCSVReader'
+1376306357192	Rename type 'FillItemsFromFile'
+1376306365260	Rename type 'FillSetsFromFile'
+1376306527999	Rename type 'FillOutfitsFromFile'
+1376306535358	Rename type 'FillGarmentsFromFile'
+1376306544467	Rename type 'GarmentsCSVReader'
+1376306620407	Delete elements
+1376306621906	Delete element
+1376306806109	Rename type 'ItemGetterI'
+1376306809886	Rename type 'SetGetterI'
+1376306812884	Rename type 'UserGetterI'
+1376307239311	Copy compilation unit
+1376307493439	Rename package 'rob.ors.informationGathering.getters.impl'
+1376313274930	Delete element
+1376313283871	Move compilation units
+1376313285882	Delete element
+1376313314547	Move compilation units
+1376313480795	Move compilation unit
+1376313957561	Delete element
+1376314091667	Move compilation unit
+1376315423201	Move compilation unit
+1376315686717	Delete element
+1376318376709	Rename method 'fastWidthAtHeigth'
+1376322732633	Delete element
+1376384142444	Rename type 'AbstractItem'
+1376384151078	Rename type 'AbstractSet'
+1376384160520	Rename type 'ConcreteItem'
+1376384166413	Rename type 'ConcreteSet'
+1376384174372	Rename type 'Item'
+1376384190290	Rename type 'AbstractItemI'
+1376384199466	Rename type 'AbstractSetI'
+1376384207104	Rename type 'ConcreteItemI'
+1376384212483	Rename type 'ConcreteSetI'
+1376384218257	Rename type 'ItemI'
+1376384223078	Rename type 'SetI'
+1376384231901	Rename type 'AllItemsCollector'
+1376384263279	Rename resource 'AbstractItem.hbm.xml'
+1376384272030	Rename resource 'AbstractSet.hbm.xml'
+1376384280784	Rename resource 'ConcreteItem.hbm.xml'
+1376384287367	Rename resource 'ConcreteSet.hbm.xml'
+1376384348565	Rename source folder 'itemsSimilarity'
+1376384365827	Rename package 'rob.ors.itemssimilarity'
+1376384372383	Rename source folder 'garmentSimilarity'
+1376384391534	Rename package 'rob.ors.itemssimilarity.imageProcessing'
+1376384397361	Rename package 'rob.ors.itemssimilarity.textProcessing'
+1376384408902	Rename type 'ItemsComparator'
+1376384434290	Rename type 'ItemProportionsExtractor'
+1376384452916	Rename type 'ItemsCSVReader'
+1376384467549	Rename type 'SetCSVReader'
+1376384482911	Rename type 'FillItemsFromFile'
+1376384489824	Rename type 'FillSetsFromFile'
+1376384499166	Rename type 'ItemGetter'
+1376384507130	Rename type 'SetGetter'
+1376384520886	Rename type 'AbstractSetPanel'
+1376384527652	Rename type 'AbstractSetsViewer'
+1376384530300	Rename type 'AbstractOutfitPanel'
+1376384540239	Rename type 'ConcreteSetPanel'
+1376384547311	Rename type 'OrderedItemsPanel'
+1376384552755	Rename type 'SuspiciousItemsPanel'
+1376384569965	Rename source folder 'itemsClustering'
+1376384586039	Rename package 'rob.ors.itemsClustering.clustering'
+1376384594247	Rename package 'rob.ors.itemsClustering.similarityMatrix'
+1376385136894	Rename field 'abstractgarment'
+1376385184744	Rename method 'getgarments'
+1376385199744	Rename method 'addgarment'
+1376385205949	Rename method 'removegarment'
+1376385241933	Rename method 'addgarment'
+1376385251239	Rename method 'removegarment'
+1376385258707	Rename method 'getgarments'
+1376385276007	Rename method 'addgarment'
+1376385284767	Rename method 'getgarments'
+1376385292063	Rename method 'removegarment'
+1376385308224	Rename method 'addAbstractgarment'
+1376385313823	Rename method 'removeAbstractgarment'
+1376385654871	Rename type 'garmentRemover'
+1376385678753	Rename compilation unit 'ItemRemover.java'
+1376385686761	Rename compilation unit 'GtemRemover.java'
+1376405605996	Copy file
+1376414506684	Rename type 'Set'
+1376492892366	Delete element
+1376557846848	Rename resource 'User.hbm.xml'
+1376557854444	Rename compilation unit 'UserI.java'
+1376557869413	Rename compilation unit 'User.java'
+1376557927903	Rename compilation unit 'UserGetter.java'
+1376557942832	Rename compilation unit 'FillUsersFromFile.java'
+1376557955883	Rename compilation unit 'UserCSVReader.java'
+1376557962131	Rename compilation unit 'UserSummaryCSVReader.java'
+1376640272555	Rename field 'sets'
+1376642553866	Delete element

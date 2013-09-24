@@ -1,0 +1,32 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.Font;
+import java.awt.image.BufferedImage;
+import java.io.File;
+
+import javax.imageio.ImageIO;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingConstants;
+
+import rob.crs.core.config.ConfigReader;
+
+public class Test {
+	public static void main(String[] args)
+	{
+		final JFrame frame = new JFrame("Abstract sets");
+		frame.setSize(600, 600);
+		final JPanel panel = new JPanel();
+		panel.setLayout(new BoxLayout(panel, SwingConstants.CENTER));
+		BufferedImage  myPicture = ImageIO.read(new File(ConfigReader.getAttribute("smallImagesFolder")+"/"+3008+".jpg"));
+		ImageIcon icon = new ImageIcon( myPicture.getScaledInstance(-1, 75,  java.awt.Image.SCALE_SMOOTH) );
+		JLabel imageLabel = new JLabel(icon,SwingConstants.CENTER);
+		imageLabel.setFont(new Font("default", Font.PLAIN, 10));
+		panel.add(imageLabel);
+		frame.setVisible(true);
+	}
+
+}

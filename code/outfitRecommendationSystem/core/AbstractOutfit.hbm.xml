@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+"http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<!-- Generated Jul 13, 2012 11:58:30 AM by Hibernate Tools 3.4.0.CR1 -->
+<hibernate-mapping>
+    <class name="rob.ors.core.model.impl.AbstractOutfitI" table="abstract_outfits">
+        <id name="id" type="java.lang.Integer">
+            <column name="id" />
+            <generator class="identity" />
+        </id>
+
+        <set name="outfits" table="outfits" inverse="true" lazy="true" cascade="save-update" fetch="select">
+            <key>
+                <column name="abstract_outfit_id" />
+            </key>
+            <one-to-many class="rob.ors.core.model.impl.ConcreteOutfitI" />
+        </set>
+        
+        
+        <bag name="garments" table="abstract_outfits_components" inverse="true" cascade="save-update" lazy="true" fetch="select">
+            <key column="abstract_outfit_id"/>
+            <many-to-many column="abstract_garment_id" class="rob.ors.core.model.impl.AbstractGarmentI" />
+        </bag>
+    </class>
+</hibernate-mapping>

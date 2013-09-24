@@ -1,0 +1,16 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.image.BufferedImage;
+import java.io.File;
+
+import javax.imageio.ImageIO;
+
+import rob.crs.core.config.ConfigReader;
+
+public class Test {
+	public static void main(String[] args)
+	{
+		BufferedImage  myPicture = ImageIO.read(new File(ConfigReader.getAttribute("smallImagesFolder")+"/"+itemId+".jpg"));
+	}
+
+}

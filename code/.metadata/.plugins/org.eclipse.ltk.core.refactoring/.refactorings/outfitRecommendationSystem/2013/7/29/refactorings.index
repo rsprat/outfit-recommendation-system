@@ -1,0 +1,51 @@
+1374320775479	Delete element
+1374320777757	Delete element
+1374320958322	Rename source folder 'rec'
+1374320973620	Delete element
+1374321053769	Move compilation units
+1374321067530	Rename package 'Utils'
+1374321078163	Rename package 'polyvore'
+1374321083837	Rename package 'model.test'
+1374321088289	Rename package 'model.impl'
+1374321092506	Rename package 'model.api'
+1374321095575	Rename package 'db.test'
+1374321098823	Rename package 'config'
+1374321104886	Rename package 'Attribute'
+1374321145693	Move source folder
+1374321176821	Move folder
+1374321218185	Move packages
+1374321225531	Move files
+1374321235637	Delete elements
+1374321237715	Delete element
+1374321267164	Rename package 'core.rob.ors.core.attribute'
+1374321276424	Rename package 'core.rob.ors.core.config'
+1374321283457	Rename package 'core.rob.ors.core.db.test'
+1374321293266	Rename package 'core.rob.ors.core.utils'
+1374321301049	Rename package 'core.rob.ors.core.test'
+1374321307045	Rename package 'core.rob.ors.core.polyvore'
+1374321313060	Rename package 'core.rob.ors.core.model.test'
+1374321318221	Rename package 'core.rob.ors.core.model.impl'
+1374321337397	Rename package 'core.rob.ors.core.model.api'
+1374321352248	Rename source folder 'src'
+1374321358393	Delete element
+1374321488459	Delete element
+1374321497924	Rename package 'rob.crs.imgfeaturesextraction'
+1374321502745	Rename package 'rob.crs.imgfeaturesextraction.test'
+1374321509545	Rename package 'rob.crs.imgfeaturesextraction.imageProcessing'
+1374321576702	Delete elements
+1374321619318	Delete element
+1374321707965	Rename package 'rob.crs.informationVisualitzation'
+1374321742204	Rename package 'rob.crs.itemClustering.clustering'
+1374321750860	Rename package 'rob.crs.itemClustering.similarityMatrix'
+1374321788317	Rename package 'rob.crs.textFeaturesExtraction'
+1374322053866	Delete element
+1374322067183	Delete element
+1374322075741	Move compilation units
+1374322096871	Rename package 'rob.crs.informationGathering.CSVReader'
+1374322103778	Rename package 'rob.crs.informationGathering.filler'
+1374322111787	Rename package 'rob.crs.informationGathering.getters.api'
+1374322122432	Rename package 'rob.crs.informationGathering.getters.test'
+1374322127451	Rename package 'rob.crs.informationGathering.getters.impl'
+1374328481931	Delete element
+1374331869744	Delete elements
+1374411578943	Delete element

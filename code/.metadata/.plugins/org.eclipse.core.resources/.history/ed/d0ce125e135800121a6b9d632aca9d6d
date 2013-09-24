@@ -1,0 +1,225 @@
+package rob.crs.informationGathering.clustering;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.management.RuntimeErrorException;
+import javax.swing.JFrame;
+import javax.swing.plaf.metal.MetalIconFactory.FolderIcon16;
+
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.hamcrest.core.IsSame;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+import org.math.plot.Plot3DPanel;
+import org.math.plot.plots.Plot;
+import org.math.plot.plots.ScatterPlot;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.Utils.Utils;
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.AbstractSet;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.Item;
+import rob.crs.core.model.impl.AbstractItemI;
+import rob.crs.core.model.impl.AbstractSetI;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import rob.crs.informationGathering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.crs.informationGathering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.crs.informationGathering.similarityMatrix.HistogramSimilarityFunction;
+import rob.crs.informationGathering.similarityMatrix.SimilarityFunction;
+import rob.crs.informationGathering.similarityMatrix.SimilarityFunctionBuilder;
+import rob.crs.informationGathering.similarityMatrix.WidthSimilarityFunction;
+import weka.clusterers.ClusterEvaluation;
+import weka.clusterers.Clusterer;
+import weka.clusterers.SimpleKMeans;
+import weka.clusterers.SpectralClusterer;
+import weka.clusterers.XMeans;
+import weka.core.Attribute;
+import weka.core.DistanceFunction;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+
+import weka.core.converters.FileSourcedConverter;
+import weka.core.neighboursearch.PerformanceStats;
+import weka.core.neighboursearch.kdtrees.KMeansInpiredMethod;
+import weka.gui.explorer.ClustererPanel;
+import weka.gui.explorer.VisualizePanel;
+import weka.gui.visualize.PlotData2D;
+
+public class Cluster {
+
+	
+	protected static void clearAbstractionDB()
+	{
+		
+		DBConnection.session().clear();
+		DBConnection.transaction();
+		DBConnection.session().createSQLQuery("UPDATE Item SET abstract_item_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("UPDATE _Set SET abstract_set_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractSetComponents").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractSet").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractItemAttribute").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractItem").executeUpdate();
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+	}
+	
+	
+	protected static void createAbstractSets()
+	{
+		
+		DBConnection.session().createSQLQuery("UPDATE _Set SET abstract_set_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractSetComponents").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM AbstractSet").executeUpdate();
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		DBConnection.session().clear();
+		DBConnection.transaction();
+		
+		
+		//Get all the concrete sets
+		Set<ConcreteSet> concreteSets = new HashSet((List<ConcreteSet>) DBConnection.session().createQuery("from ConcreteSetI").list());
+
+		List<AbstractSet> abstractSets = new LinkedList<AbstractSet>();
+		//For each concrete set, search the abstract set to which it belongs or create it and add itself to the list
+		for(ConcreteSet concreteSet : concreteSets)
+		{
+			AbstractSet abstractSet = getSuitableAbstractSet(concreteSet,abstractSets);
+			if(abstractSet!=null)
+			{
+				abstractSet.addSet(concreteSet);
+				DBConnection.session().saveOrUpdate(abstractSet);
+			}
+		}
+		DBConnection.transaction().commit();
+	}
+
+	
+	/**
+	* Get the abstract set that represents the given concrete set.
+	 * If the abstract set is found on the abstractSetCluster map, updates its likes & views and returns it.
+	 * If not, creates it.
+	 * @param set
+	 * @param abstractSetCluster
+	 * @return
+	 */
+	protected static AbstractSet getSuitableAbstractSet(ConcreteSet set,List<AbstractSet> abstractSets )
+	{
+		//Get the items that the set abstraction should have
+		List<AbstractItem> abstractItems = new LinkedList<AbstractItem>();
+		LinkedList<Integer> ids = new LinkedList<Integer>();
+
+		for(ConcreteItem item: set.getItems())
+			{
+				if(item.getAbstractItem() == null) return null;//Abstract item is null, so we can't create an abstract set
+				abstractItems.add(item.getAbstractItem()); 
+				ids.add(item.getAbstractItem().getId());
+				
+			}
+
+		//Search the list of abstract set for an abstract set with this items
+		for(AbstractSet abstractSet : abstractSets)
+		{
+		
+			LinkedList<Integer> abstractSetAbstractItemsIds = new LinkedList<Integer>();
+		
+			boolean match = true;
+			for(AbstractItem aitem: abstractSet.getItems()) 
+			{
+				abstractSetAbstractItemsIds.add(aitem.getId());
+				if(abstractSetAbstractItemsIds.containsAll(ids) && abstractSetAbstractItemsIds.size()==ids.size())return abstractSet;
+
+			}
+	
+//			//If found, no need to create a new abstract set, add the concrete set to the list of concrete sets of the abstract set
+//			if(abstractSet.getItems().size() == abstractItems.size() && abstractSet.getItems().containsAll(abstractItems)) // Check the size s1: 1,2 and s2: 1,1,2 are equals
+//			{			
+//				System.out.println("Match!");
+//				return abstractSet;
+//			}						
+		}
+		
+		
+
+		//If not found, create an abstract set with the items and add it to the list
+		AbstractSet abstraction = new AbstractSetI();
+		for(AbstractItem item: abstractItems) abstraction.addItem(item);//Use the addItem method to propagate to the item
+		abstractSets.add(abstraction);
+		
+		
+
+		return abstraction;
+	}
+	
+	public static void createSimilarityMatrix()
+	{
+		for(Category cat : PolyvoreCategoryTree.getSubtreeAsSet(0))
+			{
+				System.out.println("Category "+cat.getName());		
+				List<Integer> items = DBConnection.session().createSQLQuery("from Item where category_id = "+cat.getId()).list();
+				CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+				fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+				{
+					@Override
+					public void setParameters(Object[] args)
+					{				
+					}
+					
+					@Override
+					public SimilarityFunction build()
+					{
+						return new HistogramSimilarityFunction();
+						
+					}
+					
+				}, 0.5f);
+				fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+				{
+					@Override
+					public void setParameters(Object[] args)
+					{				
+					}
+					
+					@Override
+					public SimilarityFunction build(){
+						return new WidthSimilarityFunction();
+						
+					}
+					
+				}, 0.5f);
+
+				
+				CompoundSimilarityMatrix mat = new CompoundSimilarityMatrix(items.toArray(Utils.toArray(items)), fb);
+				
+	
+			}
+		
+	}
+	public static void main(String[] args)
+	{
+		
+	
+	}
+
+}
+

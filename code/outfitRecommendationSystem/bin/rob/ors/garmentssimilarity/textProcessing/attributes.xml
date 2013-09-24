@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+
+    <attribute name="neck" id="1" defaultId="25">
+        <values>
+	        <value name="v" id="1">	        
+	        	<synonym name="'v'"/>        	    
+	        </value>        
+	   		<value name="drapped" id="2"/>   
+			<value name="halter" id="3"/>
+			<value name="square" id="4"/>
+			<value name="crew" id="5"/>
+			<value name="scoop" id="6"/>
+			<value name="boat" id="7">
+			    <synonym name="bateau"/>
+			</value>			
+			<value name="turtle" id="8">
+			    <synonym name="polo"/>
+			    <synonym name="turtleneck"/>
+			</value>
+			<value name="off-shoulder" id="9">
+			    <synonym name="off-the-shoulder"/>
+			</value>    			
+			<value name="sweetheart" id="10"/>
+			<value name="keyhole" id="11"/>
+			<value name="cowl" id="12"/>
+			<value name="round" id="13"/>
+			<value name="plunging" id="14"/>       
+			<value name="jewel" id="15"/>
+			<value name="one-shoulder" id="16" >
+			    <synonym name="one shulder"/>
+			</value>    
+			<value name="peter pan" id="17">
+			    <synonym name="peter-pan"/>
+			</value>
+			<value name="sailor" id="18"/>
+			<value name="mandarin" id="19"/>
+			<value name="roll" id="20"/>		
+			<value name="cutout top" id="21"/>
+			<value name="funnel" id="22"/>
+			<value name="draped" id="23"/>
+			<value name="slash" id="23"/>
+			<value name="high" id="23"/>			
+			<value name="twisted neckline" id="24"/>
+			<value name="UNKNOWN" id="25"/>
+
+		</values> 
+		<automatic-synonyms>
+		    <append term=" neck"/>
+		    <append term=" neckline"/>
+		    <append term=" necklined"/>		    
+		    <append term=" collar"/>	
+		</automatic-synonyms>
+    </attribute>
+   	
+	
+	
+	<attribute name="pattern" id="2" defaultId="12">
+	    <values>
+	        <value name="floral" id="1">
+	            <synonym name="flowery"/>
+	            <synonym name="flowered"/>
+	        </value>	        
+	        <value name="plain" id="2"/>
+	        <value name="spot" id="3">
+	            <synonym name="spotted" />
+	             <synonym name="spotty"/>
+	        </value>
+	        <value name="stripe" id="4">
+	            <synonym name="striped"/>
+	        </value>
+	        <value name="tartan" id="5"/>
+	        <value name="animal" id="6"/>
+	        <value name="check" id="7">
+	            <synonym name="checked"/>
+	            <synonym name="checkered"/>
+	        </value>	       
+			<value name="crocodile" id="8"/>
+	        <value name="plaid" id="9"/>
+	        <value name="polka dot" id="10">
+	            <synonym name="polka dotted"/>
+	            <synonym name="polka-dotted"/>
+	        </value>
+	        <value name="pattern" id="11">
+	            <synonym name="patterned"/>
+	        </value>	       
+			<value name="plain" id="12"/>
+	    </values>
+	    <automatic-synonyms>
+	        <append term=" print"/>
+	    </automatic-synonyms>
+	</attribute>
+	
+	<attribute name="fit" id="3" defaultId="6">
+	    <values>
+	        <value name="wide" id="1">
+	            <synonym name="roomy"/>
+	        </value>
+	        <value name="baggy" id="2">
+	            <synonym name="loose"/>
+	            <synonym name="loosy"/>
+	            <synonym name="oversized"/>
+	        </value>
+	        <value name="narrow" id="3"/>
+	        <value name="thigh" id="4">
+				<synonym name="fitted"/>
+				<synonym name="close" />
+				<synonym name="skinny"/>
+			</value>	        
+	        <value name="stretch" id="5"/>
+			<value name="UNKNOWN" id="6"/>	        
+	    </values>
+	    <automatic-synonyms/>	
+	</attribute>
+
+	<attribute name="hemline" id="4" defaultId="13">
+	    <values>
+			<value name="floor length" id="1">
+				<synonym name="floor"/>
+				<synonym name="falls to the floor"/>
+	        </value>
+	        <value name="ankle" id="2"/>
+	        <value name="midcalf" id="3"/>
+			<value name="below knee" id="4">
+				<synonym name="below the knee"/>
+				<synonym name="below the knees"/>
+				<synonym name="below knees"/>
+	        </value>
+			<value name="above knee" id="5">
+				<synonym name="above the knee"/>
+				<synonym name="above the knees"/>
+				<synonym name="above knees"/>
+				<synonym name="above knee"/>
+	        </value>
+			<value name="at knee" id="6">
+				<synonym name="at the knee"/>
+				<synonym name="at the knees"/>
+				<synonym name="at knees"/>
+				<synonym name="at knee"/>
+				<synonym name="knee length"/>
+	        </value>
+	        <value name="mid thigh" id="7">
+				<synonym name="mid thigh"/>
+	        </value>
+	        <value name="hip high" id="8"/>
+	        <value name="hankerchief" id="9"/>
+	        <value name="diagonal" id="10"/>
+	        <value name="mordern-but" id="11"/>
+	        <value name="asymmetric" id="12"/>
+			<value name="UNKNOWN" id="13"/>
+	   </values>
+	   <automatic-synonyms>
+	       <append term="lengt"/>
+	       <append term="-length"/>
+	   </automatic-synonyms>
+	</attribute>
+	
+	<attribute name="sleve" id="5" defaultId="31">
+	<!--http://fashionsizzle.com/?p=6630-->
+	    <values>
+	        <value name="sleeveless" id="1">
+	            <synonym name="sleeveless"/>
+	            <synonym name="sleeve less"/>
+	        </value>
+	        <value name="long sleeve" id="2"/>
+	        <value name="cap sleeve" id="3"/>
+			<value name="three quarter length sleeve" id="4">
+				<synonym name="3/4 length sleeve"/>
+				<synonym name="3/4 sleeve"/>
+			</value>
+			<value name="one quarter length sleeve" id="5">
+				<synonym name="1/4 length sleeve"/>
+				<synonym name="1/4 sleeve"/>
+				<synonym name="short sleeves"/>
+			</value>
+			<value name ="leg of mutton sleeve" id="6"/>
+			<value name="angel sleeve" id="7"/>
+			<value name="petal sleeve" id="8"/>
+			<value name="peasant sleeve" id="9"/>
+			<value name="juliet sleeve" id="10"/>
+			<value name="ragland sleeve" id="11"/>
+			<value name="lantern sleeve" id="12"/>
+			<value name="batwing sleeve" id="13"/>
+			<value name="butterfly sleeve" id="14"/>
+			<value name="gigot sleeve" id="15"/>
+			<value name="bell sleeve" id="16"/>
+			<value name="bishop sleeve" id="17"/>
+			<value name="dolman sleeve" id="18"/>
+			<value name="gigot sleeve" id="19"/>
+			<value name="fitted point sleeve" id="20"/>
+			<value name="hanging sleeve" id="21"/>
+			<value name="pagoda sleeve" id="22"/>
+			<value name="paned sleeve" id="23"/>
+			<value name="poet sleeve" id="24"/>
+			<value name="kimono sleeve" id="25"/>
+			<value name="paned sleeve" id="26"/>
+			<value name="regland sleeve" id="27"/>
+			<value name="set in sleeve" id="28"/>
+			<value name="two piece sleeve" id="29"/>
+			<value name="puffed sleeve" id="30">
+				<synonym name="puff sleeve"/>	
+			</value>
+			<value name="UNKNOWN" id="31"/>
+	    </values>
+     	<automatic-synonyms>		  
+		    <append term="s"/>
+		</automatic-synonyms>
+	</attribute>
+	
+	<attribute name="strap" id="6" defaultId="3"> <!-- tiras -->
+	    <values>
+	        <value name="strap" id="1">
+	            <synonym name="straps"/>
+	       </value>
+	        <value name="strapless" id="2"/>
+	        <value name="UNKNOWN" id="3"/>
+	    </values>
+	    <automatic-synonyms/>
+	</attribute>
+	
+	
+	<attribute name="skirt-type" id ="7" defaultId="22">
+		<values>
+		<value name="a line" id="1"/>
+		<value name="mini" id="2"/>
+		<value name="bubble" id="3"/>
+		<value name="tulip" id="4"/>
+		<value name="full skirt" id="5"/>
+		<value name="circular skirt" id="6"/>
+		<value name="flared skirt" id="7"/>
+		<value name="wrap skirt" id="8"/>
+		<value name="umbrella skirt" id="9"/>
+		<value name="dirndle skirt" id="10"/>
+		<value name="gored skirt" id="11"/>
+		<value name="straight skirt" id="12"/>
+		<value name="tube skirt" id="13"/>
+		<value name="pleated skirt" id="14"/>
+		<value name="asymetric skirt" id="15"/>
+		<value name="ballerina skirt" id="16"/>
+		<value name="culotte" id="17"/>
+		<value name="broomstick skirt" id="18"/>
+		<value name="kilt" id="19"/>
+		<value name="gathered" id="20"/>
+		<value name="pencil" id="21"/>
+		<value name="UNKNOWN" id="22"/>
+	    </values>
+	    <automatic-synonyms/>	
+	</attribute>
+	
+	
+	
+<!--
+
+<attribute name="closing" id="7" defaultId="7">
+	    <values>
+	        <value name="concealed zip" id="1"/>
+	        <value name="zipp" id="2">
+	            <synonym name="zipper"/>
+	         </value>
+    	     <value name="buttons" id="3">
+	            <synonym name="buttoned"/>
+	         </value>
+	         <value name="fastening at back" id="4">
+	             <synonym name="fastening on back"/>
+	             <synonym name="fastening at the back"/>
+	             <synonym name="back fastening"/>
+	             <synonym name="back zip fastening"/>
+	             <synonym name="zip fastening on back"/>
+	             <synonym name="back zipper"/>
+	         </value>
+			 <value name="fastening at front" id="5">
+	             <synonym name="fastening on front"/>
+	             <synonym name="fastening at the front"/>
+	             <synonym name="front fastening"/>
+	             <synonym name="front zip fastening"/>
+	             <synonym name="zip fastening on front"/>
+	             <synonym name="front zipper"/>
+	         </value>
+			 <value name="fastening at side" id="6">
+	             <synonym name="fastening at the side"/>
+	             <synonym name="fastening on side"/>
+	             <synonym name="side fastening"/>
+	             <synonym name="side zip fastening"/>
+	             <synonym name="zip fastening on side"/>
+	             <synonym name="side zipper"/>
+	         </value>
+			 <value name="UNKNOWN" id="7"/>
+	    </values>
+	    <automatic-synonyms/>	
+	</attribute>
+
+
+	<attribute name="pleated" id="9" defaultId="2">
+	    <values>
+	        <value name="pleat" id="1">
+	        	<synonym name="playd"/>	        
+	        	<synonym name="pleated"/>	        
+	        	<synonym name="pleats"/>	        
+	        	<synonym name="pleting"/>	        
+	        </value>    
+			<value name="UNKNOWN" id="2"/>
+	    </values>
+	    <automatic-synonyms/>
+	</attribute>
+	
+	<attribute name="layered" id="10">
+	    <values>
+	        <value name="layered" id="1"/>  
+	    </values>
+	    <automatic-synonyms/>
+	</attribute>
+	
+	<attribute name="finish" id="11">
+	
+	<attribute name="random" id="12">
+	    <values>
+	        <value name="scalloped" id="1"/>
+	        <value name="asymmetric" id="2"/>
+	        <value name="smocked" id="3"/>
+	        <value name="pocket" id="4"/>
+	        <value name="bow" id="5"/>
+	        <value name="waistband" id="6"/>  
+	        <value name="clutch" id="7"/> 
+	        <value name="ruching" id="8"/> 
+	        <value name="ribbon" id="9"/> 
+	        <value name="boned bodice" id="10"/>
+	 
+	    </values>
+	    <automatic-synonyms/>	
+	</attribute>
+	-->
+	<!--	http://www.thesoko.com/thesoko/article2111-1.html
+	
+	
+	<attribute name="fabric" id="2" defaultId="209" >
+		<values>
+			<value name="barathea" id="1"/>
+			<value name="barkcloth" id="2"/>
+			<value name="batik" id="3"/>
+			<value name="basket weave" id="4"/>
+			<value name="batiste" id="5"/>
+			<value name="batting" id="6"/>
+			<value name="beaded" id="7"/>
+			<value name="bedford cord" id="8"/>
+			<value name="bengaline" id="9"/>
+			<value name="berber fleece" id="10"/>
+			<value name="birdseye" id="11"/>
+			<value name="boiled wool" id="12"/>
+			<value name="bonded" id="13"/>
+			<value name="boucle" id="14"/>
+			<value name="broadcloth" id="15"/>
+			<value name="brocade" id="16"/>
+			<value name="brushed" id="17"/>
+			<value name="buckram" id="18"/>
+			<value name="bull denim" id="19"/>
+			<value name="bunting" id="20"/>
+			<value name="burlap" id="21"/>
+			<value name="burn-out" id="22"/>
+			<value name="calico" id="23"/>
+			<value name="canton flannel" id="24"/>
+			<value name="canvas" id="25"/>
+			<value name="challis" id="26"/>
+			<value name="chambray" id="27"/>
+			<value name="chantilly lace" id="28"/>
+			<value name="chamois" id="29"/>
+			<value name="charmeuse" id="30"/>
+			<value name="cheesecloth" id="31"/>
+			<value name="chenille" id="32"/>
+			<value name="chiffon" id="33"/>
+			<value name="china silk" id="34"/>
+			<value name="china twill" id="35"/>
+			<value name="chintz" id="36"/>
+			<value name="cire" id="37"/>
+			<value name="clips" id="38"/>
+			<value name="cloque" id="39"/>
+			<value name="coated" id="40"/>
+			<value name="coating" id="41"/>
+			<value name="corduroy" id="42"/>
+			<value name="covert" id="43"/>
+			<value name="crash" id="44"/>
+			<value name="crepe" id="45">
+			    <synonym name="crepe de chine"/>
+			    <synonym name="crepe-back"/>
+			    <synonym name="crepon"/>
+			</value>
+			<value name="crepon" id="46"/>
+			<value name="crewel" id="47"/>
+			<value name="crinkle" id="48"/>
+			<value name="crinoline" id="49"/>
+			<value name="crushed" id="50"/>
+			<value name="crushed velvet" id="51"/>
+			<value name="damask" id="52"/>
+			<value name="dazzle" id="53"/>
+			<value name="denim" id="54"/>
+			<value name="dobby weave" id="55"/>
+			<value name="doeskin" id="56"/>
+			<value name="donegal tweed" id="57"/>
+			<value name="dotted swiss" id="58"/>
+			<value name="double faced" id="59"/>
+			<value name="double knit" id="60"/>
+			<value name="double weave" id="61"/>
+			<value name="drill" id="62"/>
+			<value name="dryflex" id="63"/>
+			<value name="duchess satin" id="64"/>
+			<value name="duck" id="65"/>
+			<value name="dupioni" id="66"/>
+			<value name="embossed" id="67"/>
+			<value name="embroidered" id="68"/>
+			<value name="end-on-end" id="69"/>
+			<value name="eyelash" id="70"/>
+			<value name="eyelet" id="71"/>
+			<value name="faille" id="71"/>
+			<value name="faux fur" id="72"/>
+			<value name="faux leather" id="73"/>
+			<value name="faux suede" id="74"/>
+			<value name="felt" id="75"/>
+			<value name="fishnet" id="76"/>
+			<value name="flannel" id="77"/>
+			<value name="flannelette" id="78"/>
+			<value name="fleece" id="79"/>
+			<value name="flocked" 	id="80"/>
+			<value name="foil" 	id="81"/>
+			<value name="foulard" 	id="82"/>
+			<value name="four-ply crepe" 	id="83"/>
+			<value name="four-way stretch" 	id="84"/>
+			<value name="french terry" 	id="85"/>
+			<value name="gabardine" 	id="86"/>
+			<value name="gauze" 	id="87"/>
+			<value name="gazar" 	id="88"/>
+			<value name="georgette" 	id="89"/>
+			<value name="gingham" 	id="90"/>
+			<value name="gore-tex®" 	id="91"/>
+			<value name="gossamer" 	id="92"/>
+			<value name="greige goods" 	id="93"/>
+			<value name="habutai" 	id="94"/>
+			<value name="heather" 	id="95"/>
+			<value name="herringbone" 	id="96"/>
+			<value name="hopsack" 	id="97"/>
+			<value name="houndstooth" 	id="98"/>
+			<value name="ikat" 	id="99"/>
+			<value name="illusion" 	id="100"/>
+			<value name="interfacing" 	id="101"/>
+			<value name="interlining" 	id="102"/>
+			<value name="interlock" 	id="103"/>
+			<value name="irridescent" 	id="104"/>
+			<value name="jacquard" 	id="105"/>
+			<value name="jersey" 	id="106"/>
+			<value name="lace" 	id="107"/>
+			<value name="lamé" 	id="108"/>
+			<value name="laminated" 	id="109"/>
+			<value name="lawn" 	id="110"/>
+			<value name="leno" 	id="111"/>
+			<value name="lining" 	id="112"/>
+			<value name="liquid lamé" 	id="113"/>
+			<value name="loden" 	id="114"/>
+			<value name="madras" 	id="115"/>
+			<value name="marocain" 	id="116"/>
+			<value name="matelassé" 	id="117"/>
+			<value name="matka" 	id="118"/>
+			<value name="matte jersey" 	id="119"/>
+			<value name="melton" 	id="120"/>
+			<value name="mesh" 	id="121"/>
+			<value name="metallic" 	id="122"/>
+			<value name="minky" 	id="123"/>
+			<value name="watermarked" 	id="124"/>
+			<value name="moleskin" 	id="125"/>
+			<value name="monk's cloth" 	id="126"/>
+			<value name="moss crepe" 	id="127"/>
+			<value name="mouseline" 	id="128"/>
+			<value name="muslin" 	id="129"/>
+			<value name="napped" 	id="130"/>
+			<value name="netting" 	id="131"/>
+			<value name="noil" 	id="132"/>
+			<value name="oil cloth" 	id="133"/>
+			<value name="organdy" 	id="134"/>
+			<value name="organza" 	id="135"/>
+			<value name="osnaburg" 	id="136"/>
+			<value name="ottoman" 	id="137"/>
+			<value name="oxford" 	id="138"/>
+			<value name="panné" 	id="139"/>
+			<value name="parachute" 	id="140"/>
+			<value name="peachskin" 	id="141"/>
+			<value name="peau de soie" 	id="142"/>
+			<value name="percale" 	id="143"/>
+			<value name="performance" 	id="144"/>
+			<value name="pile" 	id="145"/>
+			<value name="pincord" 	id="146"/>
+			<value name="pleather" 	id="147"/>
+			<value name="plush" 	id="148"/>
+			<value name="pointelle" 	id="149"/>
+			<value name="pongee" 	id="150"/>
+			<value name="ponte di roma" 	id="151"/>
+			<value name="poplin" 	id="152"/>
+			<value name="pucker" 	id="153"/>
+			<value name="quilted" 	id="154"/>
+			<value name="raschel" 	id="155"/>
+			<value name="reversible" 	id="156"/>
+			<value name="rib knit" 	id="157"/>
+			<value name="ripstop" 	id="158"/>
+			<value name="sailcloth" 	id="159"/>
+			<value name="sateen" 	id="160"/>
+			<value name="satin" 	id="161"/>
+			<value name="saxony" 	id="162"/>
+			<value name="seersucker" 	id="163"/>
+			<value name="sequinned" 	id="164"/>
+			<value name="serge" 	id="165"/>
+			<value name="shantung" 	id="166"/>
+			<value name="sharkskin" 	id="167"/>
+			<value name="sheer" 	id="168"/>
+			<value name="sheeting" 	id="169"/>
+			<value name="sherpa" 	id="170"/>
+			<value name="shetland" 	id="171"/>
+			<value name="shimmer" 	id="172"/>
+			<value name="slinky" 	id="173"/>
+			<value name="slipper satin" 	id="174"/>
+			<value name="sparkle organza" 	id="175"/>
+			<value name="stretch" 	id="176"/>
+			<value name="suede cloth" 	id="177"/>
+			<value name="sueded" 	id="178"/>
+			<value name="surah" 	id="179"/>
+			<value name="taffeta" 	id="180"/>
+			<value name="tapestry" 	id="181"/>
+			<value name="tartan" 	id="182"/>
+			<value name="terry cloth" 	id="183"/>
+			<value name="terry velour" 	id="184"/>
+			<value name="thermal" 	id="185"/>
+			<value name="thinsulate™" 	id="186"/>
+			<value name="ticking" 	id="187"/>
+			<value name="tie-dye" 	id="188"/>
+			<value name="tissue faille" 	id="189"/>
+			<value name="tricot" 	id="190"/>
+			<value name="tricotine" 	id="191"/>
+			<value name="tulle" 	id="192"/>
+			<value name="tussah" 	id="193"/>
+			<value name="tweed" 	id="194"/>
+			<value name="twill" 	id="195"/>
+			<value name="union cloth" 	id="196"/>
+			<value name="velour" 	id="197"/>
+			<value name="velvet" 	id="198"/>
+			<value name="velveteen" 	id="199"/>
+			<value name="voile" 	id="200"/>
+			<value name="waffle" 	id="201"/>
+			<value name="washed" 	id="202"/>
+			<value name="whipcord" 	id="203"/>
+			<value name="worsted" 	id="204"/>
+			<value name="grosgrain" 	id="205"/>
+			<value name="cashmere" 	id="206"/>
+			<value name="silk" id="207"/>
+			<value name="wool" id="208"/>
+			<value name="UNKNOWN" id="209"/>
+		</values>	
+		<automatic-synonyms/>	
+	</attribute>  
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	-->
+	
+	
+	
+</root>
+
+<!--
+one-shoulder
+one shoulder
+single shoulder
+single-shouldered
+
+asymetric
+tunic
+swater dress
+maxi dress
+Wrap Dress
+Little black dress
+sweater dress
+
+sundress
+Corset
+Corseted
+
+high waist
+high-waist
+
+full-length-->

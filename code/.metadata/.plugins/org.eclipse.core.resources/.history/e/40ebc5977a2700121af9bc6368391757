@@ -1,0 +1,232 @@
+package rob.crs.informationGathering.visualitzation;
+
+import java.awt.BorderLayout;
+import java.awt.Button;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.LayoutManager;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.geom.Point2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.imageio.ImageIO;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSlider;
+import javax.swing.SwingConstants;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.model.api.AbstractItem;
+import rob.crs.core.model.api.AbstractSet;
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.ConcreteSet;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+import rob.crs.imgfeaturesextraction.FeaturesExtractor;
+import rob.crs.imgfeaturesextraction.ItemsComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import weka.core.Attribute;
+
+public class Comp3ItemsPanel extends ItemsPanel implements ComponentListener, ChangeListener{
+	
+	private double colorWeight = 0.3333;
+	JSlider colorWeightSlider;
+	
+	private double shapeWeight = 0.3333;
+	JSlider shapeWeightSlider;
+	
+	private double noiseWeight = 0.3333;
+	JSlider noiseWeightSlider;
+		
+	private List<Integer[]> treeAttributesItems;
+	
+	
+
+	private void addSliders()
+	{
+		colorWeightSlider = new JSlider(JSlider.HORIZONTAL,0, 100, 33);
+		colorWeightSlider.addChangeListener(this);
+		add(new JLabel("Color"));
+		add(colorWeightSlider);
+		
+		shapeWeightSlider = new JSlider(JSlider.HORIZONTAL,0, 100, 33);
+		shapeWeightSlider.addChangeListener(this);
+		add(new JLabel("Shape"));
+		add(shapeWeightSlider);
+		
+		noiseWeightSlider = new JSlider(JSlider.HORIZONTAL,0, 100, 33);
+		noiseWeightSlider.addChangeListener(this);
+		add(new JLabel("Noise"));
+		add(noiseWeightSlider);		
+	}
+	
+	private void computeSimilarity()
+	{
+	
+		ConcreteItem referenceItem = getReferenceItem();
+		treeAttributesItems = new LinkedList<Integer[]>();
+		for(ConcreteItem item: items)
+		{
+			Integer [] sim  = get3ComponentsSimilarity(item,referenceItem);
+			Integer[] aux = {item.getId(),0,0,0};
+			aux[1] = sim[0];
+			aux[2] = sim[1];
+			aux[3] = sim[2];
+			treeAttributesItems.add(aux);		
+		}
+		tuples = quatruplesToTuples(treeAttributesItems);
+		
+	}
+	
+	public Comp3ItemsPanel(List<ConcreteItem> items)
+	{	
+		super(items);
+		computeSimilarity();
+		addSliders();		
+		updateItemsPanel();
+	}
+	
+	private Integer[] get3ComponentsSimilarity(ConcreteItem anItem,ConcreteItem anotherItem )
+	{	
+		if(anItem == null || anotherItem == null) return new Integer[]{0,0,0};
+		int shapeSimilarity = 0;
+		try{
+			shapeSimilarity = ItemsComparator.similarity(anItem.getId(), anotherItem.getId());
+		}catch (Exception e) {
+			shapeSimilarity = 0;
+		}
+		
+	
+		int colorSimilarity = 0;		
+		try
+		{
+			int anItemColor = anItem.getAttributes().get(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId());
+			int anotherItemcolor = anotherItem.getAttributes().get(rob.crs.core.model.api.Attribute.FIRST_COLOR_RGB.getId());
+			ColorComparator comp = new ColorComparator();
+			int colorDist = comp.compare(CvMatUtils.intToBGR(anItemColor)	, CvMatUtils.intToBGR(anotherItemcolor)	);
+			colorSimilarity = 100- colorDist;
+		}catch(Exception e){System.out.println("err?");}
+
+		int noiseSimilarity=0;
+		try
+		{
+	
+			int anItemNoise = anItem.getAttributes().get(rob.crs.core.model.api.Attribute.NOISE.getId());
+			int anotherItemNoise = anotherItem.getAttributes().get(rob.crs.core.model.api.Attribute.NOISE.getId());
+			
+			noiseSimilarity = 100-Math.abs(anItemNoise-anotherItemNoise);
+		}
+		catch(Exception e){ System.out.println("err?");}
+		System.out.println(shapeSimilarity+" "+colorSimilarity+" "+noiseSimilarity);	
+		return new Integer[]{shapeSimilarity,colorSimilarity,noiseSimilarity};
+		
+	}
+
+	private List<Integer[]> quatruplesToTuples(List<Integer[]> quatruples)
+	{
+		List<Integer[]> tuples = new LinkedList<Integer[]>();
+		for(Integer[] quatruple : quatruples)
+		{
+			int weight = (int) (quatruple[1]*shapeWeight+quatruple[2]*colorWeight+quatruple[3]*noiseWeight);
+			tuples.add(new Integer[]{quatruple[0],weight});
+		}
+		return tuples;
+		
+	}
+	
+	private double[] applyDelta(double v1, double v2, double delta)
+	{
+		if((v1==0 && delta<0) || (v1 == 100 && delta>0))
+		{
+			v2+=delta;
+			return new double[]{v1,v2};
+		}
+		
+		if((v2==0 && delta<0) || (v2 == 100 && delta>0))
+		{
+			v1+=delta;
+			return new double[]{v1,v2};
+		}
+		
+		delta = delta / 2;
+		v1+=delta;
+		v2+=delta;
+
+		return new double[]{v1,v2};
+	}
+	
+	@Override
+	public void stateChanged(ChangeEvent arg0) {
+		if(arg0.getSource().equals(colorWeightSlider))
+		{
+			colorWeight = colorWeightSlider.getValue()/100.0;
+			double totalWeight = colorWeight+shapeWeight+noiseWeight;
+			double newValues[] = applyDelta(shapeWeight,noiseWeight,(1-totalWeight));
+			shapeWeight = newValues[0];
+			noiseWeight = newValues[1];
+			
+		}
+		
+		if(arg0.getSource().equals(shapeWeightSlider))
+		{
+			shapeWeight = shapeWeightSlider.getValue()/100.0;
+			double totalWeight = colorWeight+shapeWeight+noiseWeight;
+			double newValues[] = applyDelta(colorWeight,noiseWeight,(1-totalWeight));
+			colorWeight = newValues[0];
+			noiseWeight = newValues[1];
+			
+		}
+		
+		if(arg0.getSource().equals(noiseWeightSlider))
+		{
+			noiseWeight = noiseWeightSlider.getValue()/100.0;
+			double totalWeight = colorWeight+shapeWeight+noiseWeight;
+			double newValues[] = applyDelta(colorWeight,shapeWeight,(1-totalWeight));
+			colorWeight = newValues[0];
+			shapeWeight = newValues[1];
+			
+		}
+		shapeWeightSlider.setValue((int) (shapeWeight*100));
+		colorWeightSlider.setValue((int) (colorWeight*100));
+		noiseWeightSlider.setValue((int) (noiseWeight*100));
+		
+		
+		tuples = quatruplesToTuples(treeAttributesItems);
+		updateItemsPanel();
+	}
+
+	@Override
+	protected void changeReferenceItem()
+	{
+		computeSimilarity();
+		updateItemsPanel();		
+	}
+	
+}
+

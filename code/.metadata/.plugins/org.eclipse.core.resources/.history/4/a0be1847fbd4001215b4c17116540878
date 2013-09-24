@@ -1,0 +1,129 @@
+package rob.crs.imgfeaturesextraction.imageProcessing;
+
+
+
+import com.googlecode.javacv.cpp.opencv_core;
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+import com.googlecode.javacv.cpp.opencv_core.CvSize;
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_legacy.*;
+public class BackgroundExtractor {
+	
+
+	/**
+	 * Create a mask for the pixels of the image with this color +-tolerance
+	 * @param image
+	 * @param value
+	 * @param tolerance
+	 */
+	public static CvMat colorMask1(CvMat image, CvScalar color,int tolerance)
+	{
+		CvMat mask = opencv_core.cvCreateMat(image.rows(),image.cols(),image.depth());
+		//sCvMat mask = CvMat.create(image.rows(),image.cols()); 
+		cvSet(mask,CV_RGB(255,255,255));
+		for(int y=0; y<image.rows(); y++)
+		{
+		    for(int x=0; x<image.cols(); x++)
+		    {		    	
+		    	if(ColorComparator.similar(CvMatUtils.get(image, y, x), color, tolerance)) mask.put(y, x,0);
+		    }
+		}
+		return mask;
+		
+	}
+	
+	
+	public static CvMat colorMaskBinary(CvMat image, CvScalar color,int tolerance)
+	{
+		CvMat mask = CvMat.create(image.rows(),image.cols()); 
+		cvSet(mask,CV_RGB(1,1,1));
+		
+		for(int y=0; y<image.rows(); y++)
+		{
+		    for(int x=0; x<image.cols(); x++)
+		    {		    	
+		    	if(ColorComparator.similar(CvMatUtils.get(image, y, x), color, tolerance)) mask.put(y, x,0);
+		    }
+		}
+		return mask;
+		
+	}
+	
+	/**
+	 * Create a mask of the image setting occlusion to the background of the image.
+	 * Given an image to work with, a color similar to the image background color and a toleranc, create a mask putting all the pixels
+	 * considered as background to black.
+	 * 
+	 * The mask is created in two steps. First horizontally and then vertically.
+	 * 
+	 * For the horizontal step, starting from the leftmost pixel put black pixels on the mask as long as the
+	 * current pixel color is similar to the background color. When a diferent color is found, stop.
+	 * Then the same process is done this time from the rightmost pixel to the left.
+	 * 
+	 * The vertical step it's basically the same but going from top to bottom and form bottom to top.
+	 * 
+	 * @param image
+	 * @param color
+	 * @param tolerance
+	 * @return
+	 */
+	public static CvMat colorMarginMask(CvMat image, CvScalar color,int tolerance){
+		
+		CvMat mask = CvMat.create(image.rows(),image.cols()); 
+		cvSet(mask,CV_RGB(255,255,255));
+		
+		// Sides
+		for(int y=0; y<image.rows(); y++)
+		{
+			//Left to right
+			int x = 0;
+			boolean edgeFound = false;			
+			while(x<image.cols() && !edgeFound)
+			{	
+				if(ColorComparator.similar(color, CvMatUtils.get(image, y, x), tolerance)) mask.put(y, x,0); 			   
+		    	else edgeFound = true;		    
+		    	x++;				
+			}
+			
+			//right to left
+			x = image.cols()-1;
+			edgeFound = false;			
+			while(x>=0 && !edgeFound)
+			{	
+				if(ColorComparator.similar(color, CvMatUtils.get(image, y, x), tolerance)) mask.put(y, x,0); 			    
+		    	else edgeFound = true;		    
+		    	x--;				
+			}	
+			
+		}
+			// Top-Bottom
+			for(int x=0; x<image.cols(); x++)
+			{
+				
+				int y = 0;
+				boolean edgeFound = false;			
+				while(y<image.rows() && !edgeFound)
+				{	
+					//if(ColorComparator.similar(color, CvMatUtils.get(image, y, x), tolerance)) mask.put(y, x,0); 				    
+			    	//else edgeFound = true;		    
+			    	y++;				
+				}
+				
+		
+				y = image.rows()-1;
+				edgeFound = false;			
+				while(y>=0 && !edgeFound)
+				{	
+					//if(ColorComparator.similar(color, CvMatUtils.get(image, y, x), tolerance)) mask.put(y, x,0); 				 
+			    	//else edgeFound = true;	
+			    	y--;				
+				}
+		  
+			}
+		
+		return mask;
+		
+	}
+	
+}

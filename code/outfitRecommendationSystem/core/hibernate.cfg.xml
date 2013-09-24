@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-configuration PUBLIC
+		"-//Hibernate/Hibernate Configuration DTD 3.0//EN"
+		"http://hibernate.sourceforge.net/hibernate-configuration-3.0.dtd">
+<hibernate-configuration>
+    <session-factory>
+     <property name="current_session_context_class">thread</property>  
+        <property name="hibernate.connection.driver_class">org.gjt.mm.mysql.Driver</property>
+
+        <property name="hibernate.connection.url">jdbc:mysql:///get_dressed_test</property>
+        <property name="hibernate.connection.username">root</property>
+        <property name="hibernate.connection.password">root</property>
+        <property name="hibernate.dialect">org.hibernate.dialect.MySQLInnoDBDialect</property>
+       	<property name="hibernate.show_sql">false</property>
+        <property name="use_sql_comments">false</property>
+        <mapping resource="ConcreteGarment.hbm.xml"/>
+        <mapping resource="ConcreteOutfit.hbm.xml"/>
+        <mapping resource="AbstractGarment.hbm.xml"/>
+        <mapping resource="AbstractOutfit.hbm.xml"/>
+        <mapping resource="Category.hbm.xml"/>
+        <mapping resource="Member.hbm.xml"/>
+
+    </session-factory>
+</hibernate-configuration>

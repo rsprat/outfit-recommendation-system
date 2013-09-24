@@ -1,0 +1,500 @@
+package rob.ors.garmentsclustering.clustering;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import org.apache.log4j.Logger;
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.AbstractGarment;
+import rob.ors.core.model.api.AbstractOutfit;
+import rob.ors.core.model.api.Category;
+import rob.ors.core.model.api.ConcreteGarment;
+import rob.ors.core.model.api.ConcreteOutfit;
+import rob.ors.core.model.api.DBConnection;
+import rob.ors.core.model.impl.AbstractGarmentI;
+import rob.ors.core.model.impl.AbstractOutfitI;
+import rob.ors.core.model.impl.CategoryI;
+import rob.ors.core.model.impl.ConcreteGarmentI;
+import rob.ors.core.polyvore.PolyvoreCategoryTree;
+import rob.ors.core.utils.Utils;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.CompoundSimilarityMatrix;
+import rob.ors.garmentsclustering.similarityMatrix.DescriptionSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.HistogramSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.NoiseSimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.SimilarityFunction;
+import rob.ors.garmentsclustering.similarityMatrix.SimilarityFunctionBuilder;
+import rob.ors.garmentsclustering.similarityMatrix.WidthSimilarityFunction;
+
+public class Cluster {
+
+	private static Logger LOGGER = Logger.getLogger(Cluster.class.getCanonicalName());
+	
+	
+	protected static void clearAbstractionDB()
+	{
+		DBConnection.transaction();
+		DBConnection.session().clear();
+		
+		DBConnection.session().createSQLQuery("UPDATE garments SET abstract_garment_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("UPDATE outfits SET abstract_outfit_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits_components").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_garments").executeUpdate();
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+	}
+		
+	public static void createAbstractOutfits()
+	{
+		DBConnection.transaction();
+		DBConnection.session().createSQLQuery("UPDATE outfits SET abstract_outfit_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits_components").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits").executeUpdate();
+		DBConnection.transaction().commit();
+		DBConnection.transaction();
+		DBConnection.session().clear();
+		DBConnection.transaction();
+		
+		
+		//Get all the concrete outfits
+		Set<ConcreteOutfit> concreteOutfits = new HashSet((List<ConcreteOutfit>) DBConnection.session().createQuery("from ConcreteOutfitI").list());
+
+		List<AbstractOutfit> abstractOutfits = new LinkedList<AbstractOutfit>();
+		//For each concrete outfit, search the abstract outfit to which it belongs or create it and add itself to the list
+		for(ConcreteOutfit concreteOutfit : concreteOutfits)
+		{
+			AbstractOutfit abstractOutfit = getSuitableAbstractOutfit(concreteOutfit,abstractOutfits);
+			if(abstractOutfit!=null)
+			{
+				abstractOutfit.addOutfit(concreteOutfit);
+				DBConnection.session().saveOrUpdate(abstractOutfit);
+			}
+		}
+		DBConnection.transaction().commit();
+	}
+
+	
+	/**
+	* Get the abstract outfit that represents the given concrete outfit.
+	 * If the abstract outfit is found on the abstractOutfitCluster map, updates its likes & views and returns it.
+	 * If not, creates it.
+	 * @param outfit
+	 * @param abstractOutfitCluster
+	 * @return
+	 */
+	protected static AbstractOutfit getSuitableAbstractOutfit(ConcreteOutfit outfit,List<AbstractOutfit> abstractOutfits )
+	{
+		//Get the garments that the outfit abstraction should have
+		List<AbstractGarment> abstractGarments = new LinkedList<AbstractGarment>();
+		LinkedList<Integer> ids = new LinkedList<Integer>();
+
+		for(ConcreteGarment garment: outfit.getGarments())
+			{
+				//if(garment.getAbstractGarment() == null) return null;//Abstract garment is null, so we can't create an abstract outfit
+				if(garment.getAbstractGarment() == null) continue;//Abstract garment is null,don't add it to the abstract garments list
+				abstractGarments.add(garment.getAbstractGarment()); 
+				ids.add(garment.getAbstractGarment().getId());
+				
+			}
+
+		//Search the list of abstract outfit for an abstract outfit with this garments
+		for(AbstractOutfit abstractOutfit : abstractOutfits)
+		{
+		
+			LinkedList<Integer> abstractOutfitAbstractGarmentsIds = new LinkedList<Integer>();
+		
+			boolean match = true;
+			for(AbstractGarment aGarment: abstractOutfit.getGarments()) 
+			{
+				abstractOutfitAbstractGarmentsIds.add(aGarment.getId());
+				//if(abstractOutfitAbstractGarmentsIds.containsAll(ids) && abstractOutfitAbstractGarmentsIds.size()==ids.size())return abstractOutfit;//Returns a outfit that its garments are superoutfit of the concrete outfit garments
+
+			}
+			//If found, no need to create a new abstract outfit, add the concrete outfit to the list of concrete outfits of the abstract outfit
+			if(abstractOutfitAbstractGarmentsIds.containsAll(ids) && abstractOutfitAbstractGarmentsIds.size()==ids.size())return abstractOutfit;	
+		}
+
+		//If not found, create an abstract outfit with the garments and add it to the list
+		AbstractOutfit abstraction = new AbstractOutfitI();
+		for(AbstractGarment garment: abstractGarments) abstraction.addGarment(garment);//Use the addGarment method to propagate to the garment
+		abstractOutfits.add(abstraction);
+		return abstraction;
+	}
+	
+	/***
+	 * Creates a similarity matrix for each category, with all the garments form that category
+	 */
+	public static void createSimilarityMatrix(int[] catIds)
+	{
+		DBConnection.transaction();
+		LOGGER.info("Starting to compute similarity matrix for all the categories");
+	
+		
+		for(int i=0;i<catIds.length;i++)
+			{
+				
+				File f = new File(Paths.OUTPUT_FOLDER+"sim_"+catIds[i]+".txt");
+				if(true || !f.exists())
+				{	
+					
+					List<Integer> garments = DBConnection.session().createSQLQuery("select id from garments where category_id = "+catIds[i]).list();
+					
+					LOGGER.info("Starting to compute similarity matrix for category "+PolyvoreCategoryTree.getCategoryById(catIds[i]).getName()+" with "+garments.size()+" garments");
+					
+					CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+					fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+					{
+						@Override
+						public void setParameters(Object[] args)
+						{				
+						}
+						
+						@Override
+						public SimilarityFunction build()
+						{							
+							return new HistogramSimilarityFunction();
+							
+						}
+						
+					}, 0.333f);
+					fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+					{
+						@Override
+						public void setParameters(Object[] args)
+						{				
+						}
+						
+						@Override
+						public SimilarityFunction build(){
+							return new WidthSimilarityFunction();
+							
+						}
+						
+					}, 0.333f);
+					fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+					{
+						@Override
+						public void setParameters(Object[] args)
+						{				
+						}
+						
+						@Override
+						public SimilarityFunction build(){
+							return new NoiseSimilarityFunction();
+							
+						}
+						
+					}, 0.333f);
+					fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+					{
+						@Override
+						public void setParameters(Object[] args)
+						{				
+						}
+						
+						@Override
+						public SimilarityFunction build(){
+							return new DescriptionSimilarityFunction();
+							
+						}
+						
+					}, 0.333f);
+					List<Integer> filteredGarments = new LinkedList<Integer>();
+					for(Integer gid :garments)
+					{
+						if(Utils.hasImage(gid))
+						{
+							filteredGarments.add(gid);
+						}
+						
+					}
+					CompoundSimilarityMatrix mat = new CompoundSimilarityMatrix(Utils.toArray(filteredGarments), fb);
+					/*try
+					{
+						mat.writeToFile(Paths.OUTPUT_FOLDER+"sim_"+catIds[i]+".txt");
+						LOGGER.info("Ended computing similarity matrix for category "+PolyvoreCategoryTree.getCategoryById(catIds[i]));
+					} catch (IOException e) {e.printStackTrace();LOGGER.error("gooo");}*/
+				}
+				else
+				{LOGGER.info("Similarity matrix for cat "+PolyvoreCategoryTree.getCategoryById(catIds[i])+" already exists");}
+				
+			}
+		
+	}
+	
+	
+	public static int getMostSimilarGarment(int newGarmentId, int catId)
+	{
+		DBConnection.transaction();
+		List<Integer> garmentsWithAbstractionIds =  DBConnection.session().createSQLQuery("SELECT id FROM garments WHERE category_id = "+catId+" ").list();
+		
+		CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new HistogramSimilarityFunction();				
+			}
+			
+		}, 0.5f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build(){
+				return new WidthSimilarityFunction();
+				
+			}
+			
+		}, 0.3f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new NoiseSimilarityFunction();				
+			}		
+				
+		}, 0.2f);
+		
+		garmentsWithAbstractionIds.add(newGarmentId);
+		CompoundSimilarityMatrix simMatrix = new CompoundSimilarityMatrix(Utils.toArray(garmentsWithAbstractionIds), fb,newGarmentId);
+		double maxSimilarity = -1;
+		int mostSimilarGarmentId = -1;
+		for(int i = 0;i<simMatrix.getGarmentsIds().length;i++)
+		{			
+			int comparingItemId = simMatrix.getGarmentId(i);
+			//if(comparingItemId == newGarmentId)	continue;		
+			if(comparingItemId == newGarmentId)
+			{
+				int k;
+				
+			}
+			double simValue = simMatrix.getSimilarity(comparingItemId, newGarmentId);
+			if(simValue>maxSimilarity)
+			{
+				maxSimilarity = simValue;
+				mostSimilarGarmentId = comparingItemId;
+			}
+		}
+		return mostSimilarGarmentId;
+		
+	}
+	/**
+	 * Given a categoryId recompute it's abstract garments based on the similarity matrix stored in the similarity matrix folder
+	 * @param catId
+	 */
+	public static void computeAbstractGarments(int catId)
+	{
+		CompoundSimilarityFunctionBuilder fb = new CompoundSimilarityFunctionBuilder();
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new HistogramSimilarityFunction();				
+			}
+			
+		}, 0.5f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build(){
+				return new WidthSimilarityFunction();
+				
+			}
+			
+		}, 0.3f);
+		fb.addSimilarityFunction(new SimilarityFunctionBuilder()
+		{
+			@Override
+			public void setParameters(Object[] args)
+			{				
+			}
+			
+			@Override
+			public SimilarityFunction build()
+			{
+				return new NoiseSimilarityFunction();				
+			}		
+				
+		}, 0.2f);
+		
+		
+		CompoundSimilarityMatrix simMatrix = new CompoundSimilarityMatrix(new int[0], fb);
+		try {
+			simMatrix.readFile(Paths.OUTPUT_FOLDER+"\\sim_"+catId+".txt");
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		int []garments = new int[simMatrix.getGarmentsIds().length];
+		LOGGER.info("NUM garmentS:"+garments.length);
+		if(garments.length==0){LOGGER.info("Skipping: ");return;}
+		for(int i=0;i<garments.length;i++) garments[i]=simMatrix.getGarmentsIds()[i];
+		MySpectralClusterer clusterer = new MySpectralClusterer();
+		
+		try {
+			clusterer.setAlphaStar(0.5);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		try {
+			
+			clusterer.buildClusterer(garments, simMatrix);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		saveClusters(clusterer,garments,catId);
+	}
+	
+	/**
+	 * Given an spectral clusterer, a list of garments ids and a category, delete all the abstract garments from the category, create the new ones and
+	 * assign each garment from that category its corresponding abstract garment
+	 *
+	 * @param clusterer
+	 * @param garments
+	 * @param categoryId
+	 */
+	public static void saveClusters(MySpectralClusterer clusterer, int[] garments,int categoryId)
+	{
+		LOGGER.info("STORING "+clusterer.numOfClusters+" CLUSTERS");
+		/*Clear the abstract outfits info, after saving the clusters the abstract outfits must be recreated*/
+		DBConnection.transaction();		
+		DBConnection.session().createSQLQuery("UPDATE outfits SET abstract_outfit_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits_components").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits").executeUpdate();
+		DBConnection.session().createSQLQuery("UPDATE garments SET abstract_garment_id= null WHERE category_id ="+categoryId).executeUpdate();//Unassign the abstract garments of the garments within the clustered category
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_garments WHERE category_id ="+categoryId).executeUpdate();//Remove the abstract garments for that category
+		
+		
+		Map<Integer,Integer> clusterAbstractGarmentId = new HashMap<Integer,Integer>(); //Keep the mapping between cluster and abstract garment id
+		
+		//Get the info of the current category
+		String categoryName = (String) DBConnection.session().createSQLQuery("SELECT name from categories where id="+categoryId).list().get(0);
+		for(int iid:garments)
+		{
+			
+			try
+			{
+
+				int clusterID = clusterer.getTrainingInstanceCluster(iid);
+				//Get the cluster where this garment belongs
+				Integer abstractGarmentId = clusterAbstractGarmentId.get(clusterID);//Get the abstract garment for the cluster
+				if(abstractGarmentId==null)//The cluster doesn't have an abstract garment yet
+				{		
+					
+					AbstractGarment aGarment = new AbstractGarmentI(new CategoryI(categoryId, categoryName));//Create it
+					DBConnection.session().save(aGarment);
+					DBConnection.transaction().commit();
+					DBConnection.transaction();
+					abstractGarmentId = aGarment.getId();		
+					clusterAbstractGarmentId.put(clusterID, abstractGarmentId);
+				}			
+				//assign the abstract garment to the garment
+				//DBConnection.transaction();
+				ConcreteGarmentI garment = ((ConcreteGarmentI)DBConnection.session().get(ConcreteGarmentI.class, iid));
+				garment.setAbstractgarment((AbstractGarmentI)DBConnection.session().get(AbstractGarmentI.class,abstractGarmentId));
+				DBConnection.session().update(garment);
+			} catch (Exception e) {e.printStackTrace();}
+			DBConnection.transaction().commit();
+			DBConnection.transaction();
+		}
+	}
+	public static void createSimilarityMatricesForAllCategories()
+	{
+		Object[] cats = PolyvoreCategoryTree.getSubtreeAsOutfit(0).toArray();
+		int[] ids = new int[cats.length];
+		for(int i=0;i<cats.length;i++) ids[i]=((Category)cats[i]).getId();
+		createSimilarityMatrix(ids);		
+	}
+	public static void createAbstractGarmentsForAllCategories()
+	{
+		
+		DBConnection.transaction();
+		List<Object> obs = DBConnection.session().createSQLQuery("SELECT id FROM categories WHERE id NOT IN (SELECT category_id FROM garments WHERE abstract_garment_id IS NOT NULL )").list();
+		for(Object o : obs)
+		{
+			int catId = ((Integer)o).intValue();
+			try{			
+				
+				LOGGER.info("CLUSTERING CATEGORIA "+catId);
+				computeAbstractGarments((Integer)o);
+			}catch(Exception ex)
+			{
+				LOGGER.error("Problems gerneratig abstract garments for cat "+catId,ex);
+			}
+		}
+	}
+	
+	
+	public static void removeAbstractGarments()
+	{
+		DBConnection.transaction();
+		DBConnection.session().createSQLQuery("UPDATE outfits SET abstract_outfit_id=null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits_components").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_outfits").executeUpdate();
+		DBConnection.session().createSQLQuery("UPDATE garments SET abstract_garment_id= null").executeUpdate();
+		DBConnection.session().createSQLQuery("DELETE FROM abstract_garments").executeUpdate();
+		
+		
+	}
+	
+	public static void main(String[] args)
+	{			
+		//createSimilarityMatricesForAllCategories();
+		/*for(int cat : new int[]{15,6,26,8,3,18,5,25})
+		{
+			for(int i = 0;i<3;i++)
+			{
+				computeAbstractGarments(cat);
+			}			
+			System.out.println("\n\n\n");
+		}*/
+		//removeAbstractGarments();
+		//createAbstractGarmentsForAllCategories();	
+		//createAbstractOutfits();
+		
+		System.out.println(getMostSimilarGarment(4396877,243));
+		
+		
+	}
+
+}
+

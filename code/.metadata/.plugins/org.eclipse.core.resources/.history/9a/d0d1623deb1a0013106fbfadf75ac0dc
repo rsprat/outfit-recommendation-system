@@ -1,0 +1,171 @@
+package rob.ors.garmentssimilarity;
+
+import static com.googlecode.javacv.cpp.opencv_core.*;
+import static com.googlecode.javacv.cpp.opencv_highgui.*;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvCompareHist;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvReleaseHist;
+
+import java.util.Date;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.log4j.Logger;
+
+
+import rob.ors.core.config.Paths;
+import rob.ors.core.model.api.Category;
+import rob.ors.core.utils.ImagePrinter;
+import rob.ors.core.utils.Utils;
+import rob.ors.garmentssimilarity.imageProcessing.BackgroundExtractor;
+import rob.ors.garmentssimilarity.imageProcessing.HistogramExtractor;
+import rob.ors.garmentssimilarity.imageProcessing.GarmentProportionsExtractor;
+import rob.ors.garmentssimilarity.imageProcessing.NoiseDetection;
+import weka.core.Debug.Random;
+
+import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.IplImage;
+import com.googlecode.javacv.cpp.opencv_imgproc.CvHistogram;
+
+/**
+ * Compar
+ * @author robert
+ *
+ */
+public class GarmentComparator {
+	private static Logger LOGGER = Logger.getLogger(GarmentComparator.class.getCanonicalName());
+	private static final String IMAGES_SRC_PATH = Paths.BIG_IMAGES_FOLDER;
+	public static IplImage getGarmentImage(int iid)
+	{
+		return cvLoadImage(IMAGES_SRC_PATH+iid+".jpg");
+	}
+
+	public static double noiseSimilarity(IplImage anGarmentImage,CvMat anGarmentMask, IplImage anotherGarmentImage, CvMat anotherGarmentMask)
+	{
+		double maxDif = Math.pow(20,2);
+		double anGarmentNoise = NoiseDetection.noiseValue(anGarmentImage, anGarmentMask);
+		double anotherGarmentNoise = NoiseDetection.noiseValue(anotherGarmentImage,anotherGarmentMask);
+		double propotrionDif = Math.pow(Math.abs(anGarmentNoise-anotherGarmentNoise),2);			
+		return (1-Math.min(1, propotrionDif/maxDif))*100;
+	}
+
+	
+
+
+	public static double widthsSimilarity(float[] anGarmentProportions,float[] anotherGarmentProportions)
+	{	
+		double similarity = 0;
+		float maxDif = ((float)Math.pow(15.0f,2));
+		for(int i = 0; i<100; i++)
+		{
+			double propotrionDif = Math.pow(Math.abs(( anGarmentProportions[i]*100)-( anotherGarmentProportions[i]*100)),2);			
+			similarity+= 1-Math.min(1, propotrionDif/maxDif);
+		}
+		return similarity;
+	}
+
+	/**
+	 * Overrithe of the method patchHistogramSimilarity(int anGarment, int anotherGarment,float patchSize) with the
+	 * garments masks passed as parameters
+	 * @param anGarmentImage
+	 * @param anGarmentMask
+	 * @param anotherGarmentImage
+	 * @param anotherGarmentMask
+	 * @param patchSize
+	 * @return
+	 */
+	public static double patchHistogramSimilarity(IplImage anGarmentImage,CvMat anGarmentMask, IplImage anotherGarmentImage, CvMat anotherGarmentMask,float patchSize)
+	{
+		patchSize = Math.max(0, patchSize);
+		patchSize = Math.min(patchSize, 1);			
+		if(anGarmentImage == null || anotherGarmentImage == null)return 0;		
+		
+		CvHistogram [][] firstGarmentHistMatrix = HistogramExtractor.getHSPatchHistogram(anGarmentImage,anGarmentMask,patchSize);
+    	CvHistogram [][] secondGarmentHistMatrix = HistogramExtractor.getHSPatchHistogram(anotherGarmentImage,anotherGarmentMask,patchSize);
+    	
+    	
+    	
+    	double accumulated = 0;
+    	for(int i = 0; i<firstGarmentHistMatrix.length; i++)
+    	{
+    		for(int j=0;j<firstGarmentHistMatrix[i].length;j++)
+    		{
+    			double val = cvCompareHist(firstGarmentHistMatrix[i][j], secondGarmentHistMatrix[i][j], 2);
+    			accumulated+=Math.abs(val);
+    		}
+    	}	
+    	
+    	double mean = accumulated/(firstGarmentHistMatrix.length*firstGarmentHistMatrix[0].length);
+    	
+    	for(int i = 0; i<firstGarmentHistMatrix.length; i++)
+    	{
+    		for(int j=0;j<firstGarmentHistMatrix[i].length;j++)
+    		{
+    	        cvReleaseHist(firstGarmentHistMatrix[i][j]); 
+    	        cvReleaseHist(secondGarmentHistMatrix[i][j]); 
+    		}
+    	}	
+    	return mean*100;
+	}
+	
+	
+	public static void main(String[] args)
+	{
+		
+		
+
+		//String garment1Name = "6295";
+		String garment1Name = "garment_test_hist_simil_11";
+		IplImage garment1Image = Utils.loadImage(4396877);//("C:\\Members\\rsprat\\Desktop\\test\\"+garment1Name+".jpg");			
+		CvMat garment1Mask  = BackgroundExtractor.colorMaskIpl(garment1Image);
+		
+		
+		double sim = patchHistogramSimilarity(garment1Image, garment1Mask, garment1Image, garment1Mask, 1);
+		System.out.println(sim);
+		
+		GarmentProportionsExtractor extr = new GarmentProportionsExtractor() {
+			
+			@Override
+			public void printProportions(ImagePrinter printer, CvMat mask) {
+				// TODO Auto-generated method stub
+				
+			}
+			
+			@Override
+			public Map<Integer, Integer> getProportions(CvMat mask) {
+				// TODO Auto-generated method stub
+				return null;
+			}
+			
+			@Override
+			public Set<Category> getAplicableCategories() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+		};
+		IplImage garmentMaskImage = new IplImage();	
+		
+		
+		
+		cvGetImage(garment1Mask, garmentMaskImage);
+		//ImagePrinter p1 = new ImagePrinter(garmentMaskImage);
+		ImagePrinter p1 = new ImagePrinter(garment1Image);
+		int top = extr.getTop(garment1Mask);
+		p1.drawHorzontalLine(top);
+		int bottom = extr.getBottom(garment1Mask);
+		p1.drawHorzontalLine(bottom);
+		float h = (float)extr.getHeight(garment1Mask);
+		for(int y = top+1;y<bottom;y++)
+		{
+			//int width = extr.getWidthAtAbsolutePoint(garment1Mask, y);
+			//System.out.println(width/h);
+			//System.out.println(y+": "+width);
+			//p1.drawWidth(new int[]{y,0,width});
+		}
+		
+		p1.print("C:\\Members\\rsprat\\Desktop\\test\\"+garment1Name+"_tb.jpg");		
+		System.out.println("top:"+top+" bottom:"+bottom);
+	}
+	
+	
+	
+}

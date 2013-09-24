@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+"http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<!-- Generated Jul 13, 2012 11:58:30 AM by Hibernate Tools 3.4.0.CR1 -->
+<hibernate-mapping>
+    <class name="rob.ors.core.model.impl.ConcreteGarmentI" table="garments">
+        <id name="id" type="int">
+            <column name="id" />
+            <generator class="assigned" />
+        </id>
+        
+       <property name="date" type="java.util.Date">
+            <column name="date" not-null="true" />
+        </property>
+               
+        <many-to-one name="abstractGarment" class="rob.ors.core.model.impl.AbstractGarmentI" lazy="proxy" cascade="save-update" fetch="select">
+            <column name="abstract_garment_id" />
+        </many-to-one>
+        
+        <many-to-one name="category" class="rob.ors.core.model.impl.CategoryI" cascade="save-update" lazy="proxy" fetch="select">
+            <column name="category_id" not-null="true" />
+        </many-to-one>
+                
+        <property name="age" type="java.lang.Integer">
+            <column name="age" />
+        </property>
+        
+        <property name="description" type="java.lang.String">
+            <column name="description" />
+        </property>
+        
+        <property name="views" type="java.lang.Integer">
+            <column name="views" />
+        </property>
+        <property name="saves" type="java.lang.Integer">
+            <column name="saves" />
+        </property>        
+     	  
+	   <set name="outfits" table="outfits_components" cascade="save-update" lazy="true" fetch="select">
+            <key column="garment_id"/>
+            <many-to-many column="outfit_id" class="rob.ors.core.model.impl.ConcreteOutfitI" />
+        </set>
+	  
+	  
+        
+    </class>
+</hibernate-mapping>

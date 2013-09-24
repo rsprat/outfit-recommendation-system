@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+"http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+<!-- Generated Jul 13, 2012 11:58:30 AM by Hibernate Tools 3.4.0.CR1 -->
+<hibernate-mapping>
+    <class name="rob.ors.core.model.impl.ConcreteOutfitI" table="outfits">
+        <id name="id" type="int">
+            <column name="id" />
+            <generator class="assigned" />
+        </id>
+        
+        <property name="date" type="java.util.Date">
+            <column name="date" not-null="true" />
+        </property>
+        
+         <!-- 
+        Can't be set to lazy. Problems with the equals method and the proxy used for lazy initialization.
+        Anyway, setting it to eager shouldn't impact a lot on the system performance thus most of the member 
+        attributes are lazy initialized.
+         -->
+        <many-to-one name="member" class="rob.ors.core.model.impl.MemberI" cascade="save-update" lazy="proxy" fetch="select" >
+            <column name="member_id" />
+        </many-to-one>
+        <many-to-one name="abstractOutfit" class="rob.ors.core.model.impl.AbstractOutfitI" cascade="save-update"  lazy="proxy"  fetch="select">
+            <column name="abstract_outfit_id" />
+        </many-to-one>
+        <property name="likes" type="java.lang.Integer">
+            <column name="likes" />
+        </property>
+        <property name="views" type="java.lang.Integer">
+            <column name="views" />
+        </property>
+        <property name="age" type="java.lang.Integer">
+            <column name="age" />
+        </property>
+        
+        <set name="garments" table="outfits_components" inverse="true" lazy="true" cascade="save-update"  fetch="select">
+            <key column="outfit_id"/>
+            <many-to-many column="garment_id" class="rob.ors.core.model.impl.ConcreteGarmentI" />
+        </set>
+        
+         <set name="membersLiked" table="members_likes" cascade="save-update" inverse="true" lazy="true" fetch="select">
+            <key column="outfit_id"/>
+            <many-to-many column="member_id" class="rob.ors.core.model.impl.MemberI" />
+        </set>  
+    </class>
+</hibernate-mapping>

@@ -1,0 +1,216 @@
+
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.Transaction;
+import org.hibernate.bytecode.buildtime.spi.ExecutionException;
+import org.hibernate.cfg.Configuration;
+
+
+import rob.crs.core.model.api.Category;
+import rob.crs.core.model.api.ConcreteItem;
+import rob.crs.core.model.api.DBConnection;
+import rob.crs.core.model.api.Item;
+
+import rob.crs.core.model.api.User;
+import rob.crs.core.model.impl.CategoryI;
+import rob.crs.core.model.impl.CompoundCategoryI;
+import rob.crs.core.model.impl.ConcreteItemI;
+import rob.crs.core.model.impl.ConcreteSetI;
+import rob.crs.core.model.impl.UserI;
+import rob.crs.core.polyvore.AllItemsCollector;
+import rob.crs.core.polyvore.PolyvoreCategoryTree;
+
+
+import rob.crs.imgfeaturesextraction.FeaturesExtractor;
+import rob.crs.imgfeaturesextraction.imageProcessing.DirectoryReader;
+import rob.crs.informationGathering.CSVReader.CSVReader;
+import rob.crs.informationGathering.CSVReader.ItemsCSVReader;
+import rob.crs.informationGathering.filler.FillItemsFromFile;
+import rob.crs.informationGathering.filler.FillSetsFromFile;
+import rob.crs.informationGathering.filler.FillUsersFromFile;
+import rob.crs.informationGathering.getters.impl.UserGetterI;
+
+
+public class Main {
+	
+	public static void printItemsId(Integer categoryId)
+	{
+		
+		Set<ConcreteItem> items = PolyvoreCategoryTree.getCategoryById(categoryId).getItems();
+		for(ConcreteItem item:items)System.out.println(item.getId());
+		
+	}
+	private static Session connect()
+	{
+		System.out.println("Connecting to DB");
+		SessionFactory sessionFactory = new Configuration().configure().buildSessionFactory();
+		Session session = sessionFactory.openSession();
+		return session;
+		
+	}
+
+	public static void test()
+	{
+
+    	Iterator<Item> it = PolyvoreCategoryTree.getSubtreeItems(6).iterator();
+
+    	while(it.hasNext())
+    	{   
+    		Item item = it.next();    	
+	    	Map<Integer,Integer> attr = FeaturesExtractor.getAttributes(item.getId(), item.getCategory(), true);
+	    	System.out.println(attr);
+    	}	
+		throw new ExecutionException("blah");
+	}
+	
+	
+	public static void getItems()
+	{
+		Session session = connect();
+    	String srcPath = "/home/robert/Desktop/images/";
+    	FillItemsFromFile.fillFromFile();	
+    	//test();
+    	int i=0;
+
+    	LinkedList<Item> allItems = new LinkedList<Item>(PolyvoreCategoryTree.getSubtreeItems(0));
+    	
+    	
+    	
+    	Collections.shuffle(allItems);
+    	
+
+    	
+    	List<Integer> visitedItems = session.createSQLQuery("SELECT id FROM Item WHERE id IN (SELECT item_id FROM ItemAttribute)").list();
+    	List<Item> toRemoveItems = new LinkedList<Item>();
+    	for(Item itm:allItems)
+    	{
+    		if(visitedItems.contains(itm.getId())) toRemoveItems.add(itm);
+    	}
+    	allItems.removeAll(toRemoveItems);
+    	
+    	Iterator<Item> it = allItems.iterator();
+    	
+    	Random random = new Random();
+    	
+    	while(it.hasNext())
+    	{   
+    		i=i+1;
+    		System.out.println("Item "+i+" of "+allItems.size());
+    		try
+    		{
+    		Item item = it.next();
+    		if(visitedItems.contains(item.getId())) System.out.println("visited:"+item.getId());
+    		else
+    		{
+    			boolean printProcess = false;
+    			if(random.nextFloat()>0.6f) printProcess = true;
+    			
+	    		Map<Integer,Integer> attr = FeaturesExtractor.getAttributes(item.getId(), item.getCategory(), printProcess);
+	    		
+	    		if(attr==null)System.out.println("category "+item.getCategory().getName()+" "+item.getCategory().getId()+" not suported ");
+	    		else
+	    		{
+		    		for(Integer key: attr.keySet()) item.getAttributes().put(key, attr.get(key));
+		
+		    		System.out.println(item.getAttributes());	    	
+		    		session.beginTransaction();
+		    		
+		    		/**
+		    		 * Due to cascade update policies, sometimes an item is added to the db before its attributes are porcessed.
+		    		 * i.e if an item I1 belongs to cat C1 to which also belongs I2 I3 I4.. When performing a save on I1 after geting it's attributes,
+		    		 * C1 will be stored and also I2 I3 I4... But those items wont have been processed yet (just read from the file)
+		    		 */
+		    		List<Item> items = session.createQuery("from ConcreteItemI WHERE id="+item.getId()).list();
+		    		System.out.println(item.getId()+" cat:"+item.getCategory().getName());
+		    		if(items.size()==0)
+		    			{		    	
+		    
+		    				session.save(item); // The item is not in the db
+		    			
+		    			}
+		    		else
+		    		{
+		    			/**
+		    			 * We need to set it's attributes.
+		    			 * There is no need for save, as it belongs to the session.
+		    			 */
+		    			Item dbItem = items.get(0);	    	
+		    			for(Integer key: item.getAttributes().keySet()) dbItem.getAttributes().put(key, item.getAttributes().get(key));
+		    			
+		    		}
+		    	
+		    		session.getTransaction().commit();
+	    		}
+    		}
+    		 }catch(Exception e)
+    		 {
+    			e.printStackTrace();
+    			if(session.getTransaction().isActive())session.getTransaction().rollback();
+    			
+    		 }
+    	}
+    	
+    	/*
+    	for(String fileName : DirectoryReader.getFileNames(srcPath, "jpg"))    	
+    	{      	    	
+    		String fileId = fileName.substring(0, fileName.length()-("jpg".length()+1));
+    		System.out.println("FILE:"+fileId);
+    		System.out.println(FeaturesExtractor.getAttributes(new Integer(fileId),PolyvoreCategoryTree.getCategoryById(17), true));	  
+
+    	}*/
+
+	}
+	
+	public static void getSets()
+	{
+		System.out.println(new FillSetsFromFile()+" sets without items");
+		
+	}
+	
+	public static void getUsers()
+	{
+		
+		 new FillUsersFromFile();
+
+	}
+	
+	public static void main(String[] args)
+	{
+		getSets();
+		
+		//getItems();
+		//getUsers();
+		//
+		
+		
+		//Session s = DBConnection.get().sessionFactory().getCurrentSession();
+		//DBConnection.transaction();
+		//DBConnection.session().createSQLQuery("INSERT INTO User VALUES (134,\"PEP\")").executeUpdate();
+		//DBConnection.transaction().commit();
+		//s.flush();
+		//s.close();
+		
+		//s = DBConnection.get().sessionFactory().openSession();
+		//s.beginTransaction();
+		//User u = (User) ( s.createQuery("from UserI").list().get(0));
+//		
+//		DBConnection.transaction();
+//		UserGetter.getUser(567, true,0);		
+//		DBConnection.session().close();
+		
+	}
+	
+	
+
+}

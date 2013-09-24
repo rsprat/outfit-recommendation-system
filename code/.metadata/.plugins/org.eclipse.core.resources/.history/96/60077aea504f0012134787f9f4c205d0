@@ -1,0 +1,93 @@
+package rob.crs.informationGathering.clustering;
+
+import java.util.Random;
+
+import javax.naming.OperationNotSupportedException;
+
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+
+import rob.crs.core.model.api.Attribute;
+import rob.crs.imgfeaturesextraction.imageProcessing.ColorComparator;
+import rob.crs.imgfeaturesextraction.imageProcessing.CvMatUtils;
+import weka.core.EuclideanDistance;
+import weka.core.Instance;
+import weka.core.Instances;
+import weka.core.neighboursearch.PerformanceStats;
+
+public class MyDistanceFunction extends EuclideanDistance{
+
+	private Random r = new Random();
+	public MyDistanceFunction()
+	{
+		this.setDontNormalize(true);
+	}
+	
+	@Override
+	public double distance(Instance first, Instance second)
+	{
+		CvScalar rgb1 = CvMatUtils.intToBGR((int) first.value(Attribute.FIRST_COLOR_RGB.getId()-1));
+		CvScalar rgb2 = CvMatUtils.intToBGR((int) second.value(Attribute.FIRST_COLOR_RGB.getId()-1));
+		ColorComparator comp = new ColorComparator();
+
+		int val = comp.compare(rgb1, rgb2);
+		return Math.abs(val);
+	
+	}
+	@Override
+	public double distance(Instance first, Instance second, PerformanceStats stats) { //debug method pls remove after use
+	   	throw new RuntimeException();
+	  }
+	@Override
+	protected double updateDistance(double currDist, double diff) {
+		throw new RuntimeException();
+	  }
+	@Override
+	  public void postProcessDistances(double distances[]) {
+		    for(int i = 0; i < distances.length; i++) {
+		      distances[i] = Math.sqrt(distances[i]);
+		    }
+		  }
+	
+	 /**
+	   * Returns the index of the closest point to the current instance.
+	   * Index is index in Instances object that is the second parameter.
+	   *
+	   * @param instance 	the instance to assign a cluster to
+	   * @param allPoints 	all points
+	   * @param pointList 	the list of points
+	   * @return 		the index of the closest point
+	   * @throws Exception	if something goes wrong
+	   */
+	@Override
+	  public int closestPoint(Instance instance, Instances allPoints,
+	      			  int[] pointList) throws Exception {
+	    double minDist = Integer.MAX_VALUE;
+	    int bestPoint = 0;
+	    for (int i = 0; i < pointList.length; i++) {
+	      double dist = distance(instance, allPoints.instance(pointList[i]), Double.POSITIVE_INFINITY);
+	      if (dist < minDist) {
+	        minDist = dist;
+	        bestPoint = i;
+	      }
+	    }
+	    return pointList[bestPoint];
+	  }
+	  
+	  /**
+	   * Returns true if the value of the given dimension is smaller or equal the
+	   * value to be compared with.
+	   * 
+	   * @param instance 	the instance where the value should be taken of
+	   * @param dim 	the dimension of the value
+	   * @param value 	the value to compare with
+	   * @return 		true if value of instance is smaller or equal value
+	   */
+	@Override
+	  public boolean valueIsSmallerEqual(Instance instance, int dim,
+	      				     double value) {  //This stays
+	    return instance.value(dim) <= value;
+	  }
+	
+	
+}
+

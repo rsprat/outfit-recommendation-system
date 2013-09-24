@@ -1,0 +1,66 @@
+package rob.ors.informationGathering.CSVReader;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+import org.apache.log4j.Logger;
+
+/**
+ * Abstract class that implements general functionalities to parse CSV formated files. The value separator 
+ * is a semicolon ";".
+ * @author rsprat
+ */
+public abstract class CSVReader {
+	private static final Logger LOGGER = Logger.getLogger(MemberCSVReader.class.getCanonicalName());
+	/**
+	 * Method for parsing a file. Reads de file with the given path and for each line calls the method proccess(string[] line)
+	 * @param path The path to the file to be read
+	 */
+	public void readFile(String path)
+	{
+		try {
+		    BufferedReader in = new BufferedReader(new FileReader(path));
+		    String str;
+		    long numLines = 0;
+		    while ((str = in.readLine()) != null) {		    	
+		        process(str.split(";"));//back to ;
+		        if(((numLines++)%1000)==0)LOGGER.debug("Read "+numLines+" lines");
+		    }
+		    in.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	/*
+	 * Convenience number for parsing an integer from a string
+	 */
+	protected Integer parseInteger(String string)
+	{
+		try
+		{
+			return new Integer(string);
+		}catch(NumberFormatException e){return null;}
+		
+	}
+	/**
+	 * Method called for each line in a CSV file
+	 * @param line
+	 */
+	protected abstract void process(String[] line);
+	
+	/**
+	 * Convenience method for joining an array of string to a single string
+	 * @param arr
+	 * @return
+	 */
+	protected String join(String[] arr)
+	{
+		String res="";
+		for(String s:arr) res+=s+";";
+		return res;
+		
+		
+	}
+}
